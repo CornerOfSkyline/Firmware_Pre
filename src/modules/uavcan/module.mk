@@ -92,3 +92,5 @@ INCLUDE_DIRS += $(LIBUAVCAN_POSIX_INC)
 #
 $(info $(shell $(LIBUAVCAN_DSDLC) $(UAVCAN_DSDL_DIR)))
 INCLUDE_DIRS += dsdlc_generated
+
+EXTRACXXFLAGS = -Wno-sign-compare

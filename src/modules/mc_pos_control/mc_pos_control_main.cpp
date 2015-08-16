@@ -1402,6 +1402,8 @@ MulticopterPositionControl::task_main()
 			/* do not move yaw while arming */
 			else if (_manual.z > 0.1f)
 			{
+				_att_sp.yaw_body = _att.yaw;
+
 				const float yaw_offset_max = _params.man_yaw_max / _params.mc_att_yaw_p;
 
 				_att_sp.yaw_sp_move_rate = _manual.r * _params.man_yaw_max;
@@ -1413,6 +1415,12 @@ MulticopterPositionControl::task_main()
 				if (fabsf(yaw_offs) < yaw_offset_max) {
 					_att_sp.yaw_body = yaw_target;
 				}
+			}
+
+			else
+
+			{
+				_att_sp.yaw_body = _att.yaw;
 			}
 
 			/* control roll and pitch directly if we no aiding velocity controller is active */
