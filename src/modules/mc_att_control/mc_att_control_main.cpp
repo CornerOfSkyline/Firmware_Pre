@@ -70,6 +70,7 @@
 #include <uORB/topics/vehicle_attitude_setpoint.h>
 #include <uORB/topics/manual_control_setpoint.h>
 #include <uORB/topics/actuator_controls.h>
+#include <uORB/topics/actuator_controls_1.h>
 #include <uORB/topics/actuator_controls_virtual_fw.h>
 #include <uORB/topics/actuator_controls_virtual_mc.h>
 #include <uORB/topics/vehicle_rates_setpoint.h>
@@ -139,10 +140,13 @@ private:
 
 	orb_advert_t	_v_rates_sp_pub;		/**< rate setpoint publication */
 	orb_advert_t	_actuators_0_pub;		/**< attitude actuator controls publication */
+	orb_advert_t	_actuators_1_pub;
 	orb_advert_t	_controller_status_pub;	/**< controller status publication */
+	
 
 	orb_id_t _rates_sp_id;	/**< pointer to correct rates setpoint uORB metadata structure */
 	orb_id_t _actuators_id;	/**< pointer to correct actuator controls0 uORB metadata structure */
+	orb_id_t _actuators_id_1;
 
 	bool		_actuators_0_circuit_breaker_enabled;	/**< circuit breaker to suppress output */
 
@@ -156,6 +160,7 @@ private:
 	struct vehicle_status_s				_vehicle_status;	/**< vehicle status */
 	struct multirotor_motor_limits_s	_motor_limits;		/**< motor limits */
 	struct mc_att_ctrl_status_s 		_controller_status; /**< controller status */
+	struct actuator_controls_s			_actuators_1;			/**< actuator controls */
 
 	perf_counter_t	_loop_perf;			/**< loop performance counter */
 	perf_counter_t	_controller_latency_perf;
@@ -314,11 +319,15 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 /* publications */
 	_v_rates_sp_pub(nullptr),
 	_actuators_0_pub(nullptr),
+	_actuators_1_pub(nullptr),
 	_controller_status_pub(nullptr),
 	_rates_sp_id(0),
 	_actuators_id(0),
+	_actuators_id_1(0),
 
 	_actuators_0_circuit_breaker_enabled(false),
+
+	
 
 /* performance counters */
 	_loop_perf(perf_alloc(PC_ELAPSED, "mc_att_control")),
@@ -336,6 +345,8 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	memset(&_motor_limits, 0, sizeof(_motor_limits));
 	memset(&_controller_status,0,sizeof(_controller_status));
 	_vehicle_status.is_rotary_wing = true;
+
+	memset(&_actuators_1, 0, sizeof(_actuators_1));
 
 	_params.att_p.zero();
 	_params.rate_p.zero();
@@ -581,6 +592,7 @@ MulticopterAttitudeControl::vehicle_status_poll()
 			} else {
 				_rates_sp_id = ORB_ID(vehicle_rates_setpoint);
 				_actuators_id = ORB_ID(actuator_controls_0);
+				_actuators_id_1 = ORB_ID(actuator_controls_1);
 			}
 		}
 	}
@@ -809,6 +821,18 @@ MulticopterAttitudeControl::task_main()
 			vehicle_status_poll();
 			vehicle_motor_limits_poll();
 
+			_v_att.yaw = 0;
+
+			/* construct attitude setpoint rotation matrix */
+			math::Matrix<3,3> _R;
+			_R.from_euler(_v_att.roll,_v_att.pitch,_v_att.yaw);
+			memcpy(&_v_att.R[0], _R.data, sizeof(_v_att.R));
+
+			/* copy quaternion setpoint to attitude setpoint topic */
+			math::Quaternion _q;
+			_q.from_dcm(_R);
+			memcpy(&_v_att.q[0], &_q.data[0], sizeof(_v_att.q));
+
 			if (_v_control_mode.flag_control_attitude_enabled) {
 				control_attitude(dt);
 
@@ -868,6 +892,13 @@ MulticopterAttitudeControl::task_main()
 				_actuators.timestamp = hrt_absolute_time();
 				_actuators.timestamp_sample = _v_att.timestamp;
 
+				_actuators_1.control[0] = (PX4_ISFINITE(_att_control(0))) ? _att_control(0) : 0.0f;
+				_actuators_1.control[1] = (PX4_ISFINITE(_att_control(1))) ? _att_control(1) : 0.0f;
+				_actuators_1.control[2] = (PX4_ISFINITE(_att_control(2))) ? _att_control(2) : 0.0f;
+				_actuators_1.control[3] = (PX4_ISFINITE(_thrust_sp)) ? _thrust_sp : 0.0f;
+				_actuators_1.timestamp = hrt_absolute_time();
+				_actuators_1.timestamp_sample = _v_att.timestamp;
+
 				_controller_status.roll_rate_integ = _rates_int(0);
 				_controller_status.pitch_rate_integ = _rates_int(1);
 				_controller_status.yaw_rate_integ = _rates_int(2);
@@ -880,6 +911,16 @@ MulticopterAttitudeControl::task_main()
 
 					} else if (_actuators_id) {
 						_actuators_0_pub = orb_advertise(_actuators_id, &_actuators);
+					}
+
+					if (_actuators_1_pub != nullptr) {
+						orb_publish(_actuators_id_1, _actuators_1_pub, &_actuators_1);
+						perf_end(_controller_latency_perf);
+						//printf("1 = nullptr\n");
+
+					} else if (_actuators_id_1) {
+						_actuators_1_pub = orb_advertise(_actuators_id_1, &_actuators_1);
+						//printf("1 = _actuators_id_1\n");
 					}
 
 				}

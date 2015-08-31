@@ -72,6 +72,7 @@ then
 		if [ $PWM_RATE != none ]
 		then
 			pwm rate -c $PWM_OUT -r $PWM_RATE
+			echo "Set PWM output frequency" >> $LOG_FILE
 		fi
 
 		#
@@ -80,14 +81,17 @@ then
 		if [ $PWM_DISARMED != none ]
 		then
 			pwm disarmed -c $PWM_OUT -p $PWM_DISARMED
+			echo "Set disarmed" >> $LOG_FILE
 		fi
 		if [ $PWM_MIN != none ]
 		then
 			pwm min -c $PWM_OUT -p $PWM_MIN
+			echo “Set min” >> $LOG_FILE
 		fi
 		if [ $PWM_MAX != none ]
 		then
 			pwm max -c $PWM_OUT -p $PWM_MAX
+			echo "Set max" >> $LOG_FILE
 		fi
 	fi
 

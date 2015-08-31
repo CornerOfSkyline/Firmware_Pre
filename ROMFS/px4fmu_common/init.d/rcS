@@ -166,6 +166,7 @@ then
 		echo "[i] No autostart"
 	else
 		sh /etc/init.d/rc.autostart
+		echo "RC.AUTOSTART" >> $LOG_FILE
 	fi
 	unset MODE
 
@@ -199,6 +200,7 @@ then
 		if [ -f /etc/extras/px4io-v2_default.bin ]
 		then
 			set IO_FILE /etc/extras/px4io-v2_default.bin
+			echo "IO_FILE　OUT" >> $LOG_FILE
 		else
 			set IO_FILE /etc/extras/px4io-v1_default.bin
 		fi
@@ -219,9 +221,11 @@ then
 				if px4io safety_on
 				then
 					# success! no-op
+					echo "SAFETY_ON" >> $LOG_FILE
 				else
 					# px4io did not respond to the safety command
 					px4io stop
+					echo "PX4IO STOP" >> $LOG_FILE
 				fi
 			fi
 
@@ -261,8 +265,10 @@ then
 		if [ $USE_IO == yes ]
 		then
 			set OUTPUT_MODE io
+			echo "OUTPUT_MODE IO" >> $LOG_FILE
 		else
 			set OUTPUT_MODE fmu
+			echo "OUTPUT_MODE FMU" >> $LOG_FILE
 		fi
 	fi
 
@@ -270,7 +276,7 @@ then
 	then
 		# Need IO for output but it not present, disable output
 		set OUTPUT_MODE none
-		echo "[i] ERROR: PX4IO not found, disabling output"
+		echo "[i] ERROR: PX4IO not found, disabling output" >> $LOG_FILE
 
 		# Avoid using ttyS0 for MAVLink on FMUv1
 		if ver hwcmp PX4FMU_V1
@@ -311,8 +317,10 @@ then
 		then
 			echo "[i] Faking GPS"
 			gps start -f
+			echo "[i] Faking GPS" >> $LOG_FILE
 		else
 			gps start
+			echo "gps start" >> $LOG_FILE
 		fi
 	fi
 	unset GPS_FAKE
@@ -342,6 +350,7 @@ then
 			if px4io start
 			then
 				sh /etc/init.d/rc.io
+				echo "px4io start" >> $LOG_FILE
 			else
 				echo "ERROR: PX4IO start failed" >> $LOG_FILE
 				tone_alarm $TUNE_ERR
@@ -558,11 +567,11 @@ then
 	#
 	if [ $VEHICLE_TYPE == mc ]
 	then
-		echo "[i] MULTICOPTER"
+		echo "[i] MULTICOPTER" >> $LOG_FILE
 
 		if [ $MIXER == none ]
 		then
-			echo "Mixer undefined"
+			echo "Mixer undefined" >>$LOG_FILE
 		fi
 
 		if [ $MAV_TYPE == none ]
@@ -571,6 +580,7 @@ then
 			if [ $MIXER == quad_x -o $MIXER == quad_+ ]
 			then
 				set MAV_TYPE 2
+				echo "MAV_TYPE = 2" >> $LOG_FILE
 			fi
 			if [ $MIXER == quad_w -o $MIXER == sk450_deadcat ]
 			then
@@ -614,6 +624,7 @@ then
 		if [ $LOAD_DAPPS == yes ]
 		then
 			sh /etc/init.d/rc.mc_apps
+			echo "LOAD_DAPPS" >> $LOG_FILE
 		fi
 	fi
 

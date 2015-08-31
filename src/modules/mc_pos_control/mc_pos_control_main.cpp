@@ -1404,12 +1404,19 @@ MulticopterPositionControl::task_main()
 			/* reset yaw setpoint to current position if needed */
 			if (reset_yaw_sp) {
 				reset_yaw_sp = false;
-				_att_sp.yaw_body = _att.yaw;
+				_att.yaw = 0;
+				//_att_sp.yaw_body = _att.yaw;
+				_att_sp.yaw_body = 0;
 			}
+
+
 
 			/* do not move yaw while arming */
 			else if (_manual.z > 0.1f)
 			{
+				_att_sp.yaw_body = 0;
+				_att.yaw = 0;
+
 				const float yaw_offset_max = _params.man_yaw_max / _params.mc_att_yaw_p;
 
 				_att_sp.yaw_sp_move_rate = _manual.r * _params.man_yaw_max;

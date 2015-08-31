@@ -18,29 +18,38 @@ then
 	if param compare EKF_ATT_ENABLED 1
 	then
 		attitude_estimator_ekf start
+		echo "attitude_estimator_ekf" >> $LOG_FILE
 	else
 		attitude_estimator_q start
+		echo "attitude_estimator_q" >> $LOG_FILE
 	fi
 	position_estimator_inav start
+	echo "position_estimator_inav" >> $LOG_FILE
 else
 	ekf_att_pos_estimator start
+	echo "ekf_att_pos_estimator" >> $LOG_FILE
 fi
 
 if mc_att_control start
 then
+	echo "mc_att_control start" >> $LOG_FILE
 else
 	# try the multiplatform version
 	mc_att_control_m start
+	echo "mc_att_control_m start" >> $LOG_FILE
 fi
 
 if mc_pos_control start
 then
+	echo "mc_pos_control start" >> $LOG_FILE
 else
 	# try the multiplatform version
 	mc_pos_control_m start
+	echo "mc_pos_control_m start" >> $LOG_FILE
 fi
 
 #
 # Start Land Detector
 #
 land_detector start multicopter
+echo "land_detector start" >> $LOG_FILE
