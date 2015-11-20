@@ -9,4 +9,16 @@
 
 sh /etc/init.d/rc.fw_defaults
  
-set MIXER easystar
+#set MIXER easystar
+
+set MIXER BigFat
+
+set PWM_OUT 12
+#set PWM_RATE 400
+set PWM_DISARMED 900
+
+set MIXER_AUX BigFat
+set PWM_AUX_OUT 123456
+set PWM_AUX_DISARMED 1500
+set PWM_AUX_MIN 1000
+set PWM_AUX_MAX 2000
