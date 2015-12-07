@@ -1,6 +1,6 @@
 ############################################################################
 #
-#   Copyright (c) 2012, 2013 PX4 Development Team. All rights reserved.
+#   Copyright (c) 2015 PX4 Development Team. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -30,13 +30,15 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 ############################################################################
-
-#
-# Tone alarm driver
-#
-
-MODULE_COMMAND	= tone_alarm
-
-SRCS		= tone_alarm.cpp
-
-MAXOPTIMIZATION	 = -Os
+px4_add_module(
+	MODULE drivers__bst
+	MAIN bst
+	STACK 1200
+	COMPILE_FLAGS
+		-Os
+	SRCS
+		bst.cpp
+	DEPENDS
+		platforms__common
+	)
+# vim: set noet ft=cmake fenc=utf-8 ff=unix : 

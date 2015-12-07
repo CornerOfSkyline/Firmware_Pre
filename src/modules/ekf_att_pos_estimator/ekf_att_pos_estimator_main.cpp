@@ -526,9 +526,6 @@ void AttitudePositionEstimatorEKF::task_main()
 	_landDetectorSub = orb_subscribe(ORB_ID(vehicle_land_detected));
 	_armedSub = orb_subscribe(ORB_ID(actuator_armed));
 
-	/* rate limit vehicle status updates to 5Hz */
-	orb_set_interval(_vstatus_sub, 200);
-
 	_sensor_combined_sub = orb_subscribe(ORB_ID(sensor_combined));
 
 	/* sets also parameters in the EKF object */
@@ -1014,6 +1011,9 @@ void AttitudePositionEstimatorEKF::publishGlobalPosition()
 	} else {
 		_global_pos.terrain_alt_valid = false;
 	}
+
+	/* baro altitude */
+	_global_pos.pressure_alt = _ekf->baroHgt;
 
 	_global_pos.yaw = _local_pos.yaw;
 
