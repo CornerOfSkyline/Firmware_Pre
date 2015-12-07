@@ -1290,8 +1290,8 @@ Sensors::parameter_update_poll(bool forced)
 					continue;
 				}
 
-				int id = h.ioctl(DEVIOCGDEVICEID, 0);
-				PX4_WARN("sensors: device ID: %s: %d, %u", str, id, (unsigned)id);
+				//int id = h.ioctl(DEVIOCGDEVICEID, 0);
+				//PX4_WARN("sensors: device ID: %s: %d, %u", str, id, (unsigned)id);
 
 				/* if the calibration is for this device, apply it */
 				if (device_id == h.ioctl(DEVIOCGDEVICEID, 0)) {
@@ -1362,8 +1362,8 @@ Sensors::parameter_update_poll(bool forced)
 					continue;
 				}
 
-				int id = h.ioctl(DEVIOCGDEVICEID, 0);
-				PX4_WARN("sensors: device ID: %s: %d, %u", str, id, (unsigned)id);
+				// int id = h.ioctl(DEVIOCGDEVICEID, 0);
+				// PX4_WARN("sensors: device ID: %s: %d, %u", str, id, (unsigned)id);
 
 				/* if the calibration is for this device, apply it */
 				if (device_id == h.ioctl(DEVIOCGDEVICEID, 0)) {
@@ -1443,8 +1443,8 @@ Sensors::parameter_update_poll(bool forced)
 					continue;
 				}
 
-				int id = h.ioctl(DEVIOCGDEVICEID, 0);
-				PX4_WARN("sensors: device ID: %s: %d, %u", str, id, (unsigned)id);
+				// int id = h.ioctl(DEVIOCGDEVICEID, 0);
+				// PX4_WARN("sensors: device ID: %s: %d, %u", str, id, (unsigned)id);
 
 				/* if the calibration is for this device, apply it */
 				if (device_id == h.ioctl(DEVIOCGDEVICEID, 0)) {
@@ -1908,6 +1908,7 @@ Sensors::rc_poll()
 		_rc.rssi = rc_input.rssi;
 		_rc.signal_lost = signal_lost;
 		_rc.timestamp = rc_input.timestamp_last_signal;
+		_rc.frame_drop_count = rc_input.rc_lost_frame_count;
 
 		/* publish rc_channels topic even if signal is invalid, for debug */
 		if (_rc_pub != nullptr) {
