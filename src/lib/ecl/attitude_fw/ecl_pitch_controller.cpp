@@ -71,22 +71,63 @@ float ECL_PitchController::control_attitude(const struct ECL_ControlData &ctl_da
 		return _rate_setpoint;
 	}
 
-	/* Calculate the error */
-	float pitch_error = ctl_data.pitch_setpoint - ctl_data.pitch;
+	/* get the usual dt estimate */
+	uint64_t dt_micros = ecl_elapsed_time(&_last_run);
+	_last_run = ecl_absolute_time();
+	float dt = (float)dt_micros * 1e-6f;
 
-	/*  Apply P controller: rate setpoint from current error and time constant */
-	_rate_setpoint =  pitch_error / _tc;
+	/* lock integral for long intervals */
+	bool lock_integrator = ctl_data.lock_integrator;
+
+	if (dt_micros > 500000) {
+		lock_integrator = true;
+	}
+
+	float _pitch_setpoint  =  ctl_data.pitch_setpoint;
 
 	/* limit the rate */
 	if (_max_rate > 0.01f && _max_rate_neg > 0.01f) {
-		if (_rate_setpoint > 0.0f) {
-			_rate_setpoint = (_rate_setpoint > _max_rate) ? _max_rate : _rate_setpoint;
+		if (_pitch_setpoint > 0.0f) {
+			_pitch_setpoint = (_pitch_setpoint > _max_rate) ? _max_rate : _pitch_setpoint;
 
 		} else {
-			_rate_setpoint = (_rate_setpoint < -_max_rate_neg) ? -_max_rate_neg : _rate_setpoint;
+			_pitch_setpoint = (_pitch_setpoint < -_max_rate_neg) ? -_max_rate_neg : _pitch_setpoint;
 		}
 
 	}
+
+	/* Calculate the error */
+	float pitch_error = _pitch_setpoint - ctl_data.pitch;
+
+
+		if (!lock_integrator && _k_i > 0.0f) {
+
+		float id = pitch_error * dt  * _k_i;
+
+		/*
+		 * anti-windup: do not allow integrator to increase if actuator is at limit
+		 */
+		if (_last_output < -1.0f) {
+			/* only allow motion to center: increase value */
+			id = math::max(id, 0.0f);
+
+		} else if (_last_output > 1.0f) {
+			/* only allow motion to center: decrease value */
+			id = math::min(id, 0.0f);
+		}
+
+		_integrator += id;
+	}
+
+	/* integrator limit */
+	//xxx: until start detection is available: integral part in control signal is limited here
+	float integrator_constrained = math::constrain(_integrator, -_integrator_max, _integrator_max);
+	_integrator = integrator_constrained;
+
+		/*  Apply P controller: rate setpoint from current error and time constant */
+	_rate_setpoint =  pitch_error / _tc;
+
+	_rate_setpoint += integrator_constrained;
 
 	return _rate_setpoint;
 }
@@ -106,17 +147,6 @@ float ECL_PitchController::control_bodyrate(const struct ECL_ControlData &ctl_da
 		return math::constrain(_last_output, -1.0f, 1.0f);
 	}
 
-	/* get the usual dt estimate */
-	uint64_t dt_micros = ecl_elapsed_time(&_last_run);
-	_last_run = ecl_absolute_time();
-	float dt = (float)dt_micros * 1e-6f;
-
-	/* lock integral for long intervals */
-	bool lock_integrator = ctl_data.lock_integrator;
-
-	if (dt_micros > 500000) {
-		lock_integrator = true;
-	}
 
 	/* Transform setpoint to body angular rates (jacobian) */
 	_bodyrate_setpoint = cosf(ctl_data.roll) * _rate_setpoint +
@@ -162,36 +192,11 @@ float ECL_PitchController::control_bodyrate(const struct ECL_ControlData &ctl_da
 	/* Finally add the turn offset to your bodyrate setpoint*/
 	_bodyrate_setpoint += body_fixed_turn_offset;
 
-
 	_rate_error = _bodyrate_setpoint - ctl_data.pitch_rate;
 
-	if (!lock_integrator && _k_i > 0.0f) {
-
-		float id = _rate_error * dt * ctl_data.scaler;
-
-		/*
-		 * anti-windup: do not allow integrator to increase if actuator is at limit
-		 */
-		if (_last_output < -1.0f) {
-			/* only allow motion to center: increase value */
-			id = math::max(id, 0.0f);
-
-		} else if (_last_output > 1.0f) {
-			/* only allow motion to center: decrease value */
-			id = math::min(id, 0.0f);
-		}
-
-		_integrator += id;
-	}
-
-	/* integrator limit */
-	//xxx: until start detection is available: integral part in control signal is limited here
-	float integrator_constrained = math::constrain(_integrator * _k_i, -_integrator_max, _integrator_max);
-
 	/* Apply PI rate controller and store non-limited output */
-	_last_output = _bodyrate_setpoint * _k_ff * ctl_data.scaler +
-		       _rate_error * _k_p * ctl_data.scaler * ctl_data.scaler
-		       + integrator_constrained;  //scaler is proportional to 1/airspeed
+	_last_output = _bodyrate_setpoint -
+		       ctl_data.pitch_rate * _k_p * ctl_data.scaler * ctl_data.scaler;  //scaler is proportional to 1/airspeed
 //	warnx("pitch: _integrator: %.4f, _integrator_max: %.4f, airspeed %.4f, _k_i %.4f, _k_p: %.4f", (double)_integrator, (double)_integrator_max, (double)airspeed, (double)_k_i, (double)_k_p);
 //	warnx("roll: _last_output %.4f", (double)_last_output);
 	return math::constrain(_last_output, -1.0f, 1.0f);
