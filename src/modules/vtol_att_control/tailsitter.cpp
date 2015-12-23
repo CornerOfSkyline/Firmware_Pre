@@ -182,7 +182,7 @@ void Tailsitter::update_vtol_state()
 
 			// check if we have reached airspeed  and pitch angle to switch to TRANSITION P2 mode
 			if ((_airspeed->true_airspeed_m_s >= _params_tailsitter.airspeed_trans
-			    && _v_att->pitch <= PITCH_TRANSITION_FRONT_P1) || !_armed->armed) {
+			     && _v_att->pitch <= PITCH_TRANSITION_FRONT_P1) || !_armed->armed) {
 				_vtol_schedule.flight_mode = FW_MODE;
 				mavlink_log_critical(_attc->get_mavlink_fd(), "FW MODE!");
 				//_vtol_schedule.transition_start = hrt_absolute_time();
@@ -467,7 +467,8 @@ void Tailsitter::fill_actuator_outputs()
 			// NOTE: There is no mistake in the line below, multicopter yaw axis is controlled by elevon roll actuation!
 			_actuators_out_1->control[actuator_controls_s::INDEX_ROLL] =
 				_actuators_mc_in->control[actuator_controls_s::INDEX_YAW];	//roll elevon
-			_actuators_out_1->control[actuator_controls_s::INDEX_PITCH] = _actuators_mc_in->control[actuator_controls_s::INDEX_PITCH];	//pitch elevon
+			_actuators_out_1->control[actuator_controls_s::INDEX_PITCH] =
+				_actuators_mc_in->control[actuator_controls_s::INDEX_PITCH];	//pitch elevon
 		}
 
 		break;
