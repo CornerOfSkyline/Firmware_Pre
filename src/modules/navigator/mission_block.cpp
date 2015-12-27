@@ -51,12 +51,16 @@
 
 #include <uORB/uORB.h>
 #include <uORB/topics/actuator_controls.h>
+#include <uORB/topics/vehicle_command.h>
 
 #include "navigator.h"
 #include "mission_block.h"
 
 actuator_controls_s actuators;
 orb_advert_t actuator_pub_fd;
+
+vehicle_command_s vehicle_command;
+orb_advert_t vehicle_command_pub_fd;
 
 
 MissionBlock::MissionBlock(Navigator *navigator, const char *name) :
@@ -98,6 +102,15 @@ MissionBlock::is_mission_item_reached()
 	if (/*_mission_item.nav_cmd == NAV_CMD_LOITER_TURN_COUNT ||*/
 	     _mission_item.nav_cmd == NAV_CMD_LOITER_UNLIMITED) {
 		return false;
+	}
+
+	if(_mission_item.nav_cmd == NAV_CMD_DO_VTOL_TRANSITION){
+		vehicle_command_pub_fd = orb_advertise(ORB_ID(vehicle_command),&vehicle_command);
+		memset(&vehicle_command,0,sizeof(vehicle_command));
+		vehicle_command.command = NAV_CMD_DO_VTOL_TRANSITION;
+		orb_publish(ORB_ID(vehicle_command), vehicle_command_pub_fd, &vehicle_command);
+		mavlink_log_critical(_navigator->get_mavlink_fd(), "publish NAV_CMD_DO_VTOL_TRANSITION");
+		return true;
 	}
 
 	hrt_abstime now = hrt_absolute_time();
