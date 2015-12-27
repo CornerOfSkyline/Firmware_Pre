@@ -392,6 +392,7 @@ void Tiltrotor::update_external_state()
 */
 void Tiltrotor::fill_actuator_outputs()
 {
+	_actuators_out_0->timestamp = _actuators_mc_in->timestamp;
 	_actuators_out_0->control[actuator_controls_s::INDEX_ROLL] = _actuators_mc_in->control[actuator_controls_s::INDEX_ROLL]
 			* _mc_roll_weight;
 	_actuators_out_0->control[actuator_controls_s::INDEX_PITCH] =
@@ -408,6 +409,7 @@ void Tiltrotor::fill_actuator_outputs()
 			_actuators_mc_in->control[actuator_controls_s::INDEX_THROTTLE];;
 	}
 
+	_actuators_out_1->timestamp = _actuators_fw_in->timestamp;
 	_actuators_out_1->control[actuator_controls_s::INDEX_ROLL] = -_actuators_fw_in->control[actuator_controls_s::INDEX_ROLL]
 			* (1 - _mc_roll_weight);
 	_actuators_out_1->control[actuator_controls_s::INDEX_PITCH] =
