@@ -57,7 +57,6 @@ VtolAttitudeControl *g_control;
 VtolAttitudeControl::VtolAttitudeControl() :
 	_task_should_exit(false),
 	_control_task(-1),
-	_mavlink_fd(-1),
 
 	//init subscription handlers
 	_v_att_sub(-1),
@@ -124,6 +123,12 @@ VtolAttitudeControl::VtolAttitudeControl() :
 
 	/* fetch initial parameter values */
 	parameters_update();
+
+	printf("Vtol_att_control initialized\n");
+
+	_params.vtol_type = 2;
+
+	printf("_params.vtol_type = %d\n",_params.vtol_type);
 
 	if (_params.vtol_type == 0) {
 		_tailsitter = new Tailsitter(this);
