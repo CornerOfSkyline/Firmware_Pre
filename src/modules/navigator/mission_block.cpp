@@ -108,8 +108,10 @@ MissionBlock::is_mission_item_reached()
 		vehicle_command_pub_fd = orb_advertise(ORB_ID(vehicle_command),&vehicle_command);
 		memset(&vehicle_command,0,sizeof(vehicle_command));
 		vehicle_command.command = NAV_CMD_DO_VTOL_TRANSITION;
+		vehicle_command.param1 = _mission_item.time_inside;
 		orb_publish(ORB_ID(vehicle_command), vehicle_command_pub_fd, &vehicle_command);
 		mavlink_log_critical(_navigator->get_mavlink_fd(), "publish NAV_CMD_DO_VTOL_TRANSITION");
+		printf("vehicle_command.param1 = %d\n",(int)vehicle_command.param1);
 		return true;
 	}
 
