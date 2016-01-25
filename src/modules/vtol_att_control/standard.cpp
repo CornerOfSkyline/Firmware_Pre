@@ -133,7 +133,7 @@ void Standard::update_vtol_state()
 		} else if (_vtol_schedule.flight_mode == TRANSITION_TO_MC) {
 			// transition to MC mode if transition time has passed
 			if (hrt_elapsed_time(&_vtol_schedule.transition_start) >
-			    (_params_standard.back_trans_dur * 1000000.0f)) {
+                (_params_standard.back_trans_dur * 1000000.0f)) {
 				_vtol_schedule.flight_mode = MC_MODE;
 			}
 		}
@@ -226,10 +226,10 @@ void Standard::update_transition_state()
 		if (_params_standard.back_trans_dur > 0.0f) {
 			float weight = (float)hrt_elapsed_time(&_vtol_schedule.transition_start) / (_params_standard.back_trans_dur *
 					1000000.0f);
-			_mc_roll_weight = weight;
-			_mc_pitch_weight = weight;
-			_mc_yaw_weight = weight;
-			_mc_throttle_weight = weight;
+            _mc_roll_weight = weight;
+            _mc_pitch_weight = weight;
+            _mc_yaw_weight = weight;
+            _mc_throttle_weight = weight;
 
 		} else {
 			_mc_roll_weight = 1.0f;

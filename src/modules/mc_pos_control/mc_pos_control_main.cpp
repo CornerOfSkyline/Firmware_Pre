@@ -1832,6 +1832,12 @@ MulticopterPositionControl::task_main()
 		      !(_control_mode.flag_control_position_enabled ||
 			_control_mode.flag_control_velocity_enabled))) {
 
+            /* reset yaw setpoint to current position if needed */
+            if (reset_yaw_sp) {
+                reset_yaw_sp = false;
+                _att_sp.yaw_body = _yaw;
+            }
+
 			if (_att_sp_pub != nullptr) {
 				orb_publish(_attitude_setpoint_id, _att_sp_pub, &_att_sp);
 

@@ -89,6 +89,7 @@
 #include <lib/mathlib/mathlib.h>
 #include <lib/geo/geo.h>
 #include <lib/tailsitter_recovery/tailsitter_recovery.h>
+#include <uORB/topics/vtol_vehicle_status.h>
 
 /**
  * Multicopter attitude control app start / stop handling function
@@ -137,6 +138,7 @@ private:
 	int		_armed_sub;				/**< arming status subscription */
 	int		_vehicle_status_sub;	/**< vehicle status subscription */
 	int 	_motor_limits_sub;		/**< motor limits subscription */
+    int   _vtol_vehicle_status_sub;     /**<vtol vehicle status subscription */
 
 	orb_advert_t	_v_rates_sp_pub;		/**< rate setpoint publication */
 	orb_advert_t	_actuators_0_pub;		/**< attitude actuator controls publication */
@@ -157,6 +159,7 @@ private:
 	struct vehicle_status_s				_vehicle_status;	/**< vehicle status */
 	struct multirotor_motor_limits_s	_motor_limits;		/**< motor limits */
 	struct mc_att_ctrl_status_s 		_controller_status; /**< controller status */
+    struct vtol_vehicle_status_s      _vtol_status;         /**< vtol vehicle status */
 
 	perf_counter_t	_loop_perf;			/**< loop performance counter */
 	perf_counter_t	_controller_latency_perf;
@@ -307,6 +310,7 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	_manual_control_sp_sub(-1),
 	_armed_sub(-1),
 	_vehicle_status_sub(-1),
+    _vtol_vehicle_status_sub(-1),
 
 	/* publications */
 	_v_rates_sp_pub(nullptr),
@@ -332,7 +336,8 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	memset(&_armed, 0, sizeof(_armed));
 	memset(&_vehicle_status, 0, sizeof(_vehicle_status));
 	memset(&_motor_limits, 0, sizeof(_motor_limits));
-	memset(&_controller_status, 0, sizeof(_controller_status));
+    memset(&_controller_status, 0, sizeof(_controller_status));
+    memset(&_vtol_status,0,sizeof(_vtol_status));
 	_vehicle_status.is_rotary_wing = true;
 
 	_params.att_p.zero();
@@ -700,6 +705,22 @@ MulticopterAttitudeControl::control_attitude(float dt)
 
 	/* feed forward yaw setpoint rate */
 	_rates_sp(2) += _v_att_sp.yaw_sp_move_rate * yaw_w * _params.yaw_ff;
+
+    /** Set yaw rate setpoint Zero when the vtol vehicle in trans mode  Start.**/
+    bool updated = false;
+    /* update vtol vehicle status*/
+    orb_check(_vtol_vehicle_status_sub, &updated);
+
+    if (updated) {
+        /* vtol status changed */
+        orb_copy(ORB_ID(vtol_vehicle_status), _vtol_vehicle_status_sub, &_vtol_status);
+    }
+
+    if(_vtol_status.vtol_in_trans_mode)
+    {
+        _rates_sp(2) = 0;
+    }
+    /**  Set yaw rate setpoint Zero when the vtol vehicle in trans mode  End.**/
 }
 
 /*
