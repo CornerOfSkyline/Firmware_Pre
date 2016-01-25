@@ -72,7 +72,7 @@ PARAM_DEFINE_FLOAT(MPC_THR_MAX, 0.9f);
  * @max 1.0
  * @group Multicopter Position Control
  */
-PARAM_DEFINE_FLOAT(MPC_MANTHR_MIN, 0.12f);
+PARAM_DEFINE_FLOAT(MPC_MANTHR_MIN, 0.08f);
 
 /**
  * Maximum manual thrust
@@ -223,7 +223,7 @@ PARAM_DEFINE_FLOAT(MPC_TILTMAX_AIR, 45.0f);
  * @max 90.0
  * @group Multicopter Position Control
  */
-PARAM_DEFINE_FLOAT(MPC_TILTMAX_LND, 15.0f);
+PARAM_DEFINE_FLOAT(MPC_TILTMAX_LND, 12.0f);
 
 /**
  * Landing descend rate
@@ -232,7 +232,16 @@ PARAM_DEFINE_FLOAT(MPC_TILTMAX_LND, 15.0f);
  * @min 0.0
  * @group Multicopter Position Control
  */
-PARAM_DEFINE_FLOAT(MPC_LAND_SPEED, 1.0f);
+PARAM_DEFINE_FLOAT(MPC_LAND_SPEED, 0.5f);
+
+/**
+ * Takeoff climb rate
+ *
+ * @unit m/s
+ * @min 0.0
+ * @group Multicopter Position Control
+ */
+PARAM_DEFINE_FLOAT(MPC_TKO_SPEED, 1.5f);
 
 /**
  * Max manual roll
