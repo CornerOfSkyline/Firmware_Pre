@@ -66,6 +66,7 @@ MissionBlock::MissionBlock(Navigator *navigator, const char *name) :
 	_waypoint_position_reached(false),
 	_waypoint_yaw_reached(false),
 	_time_first_inside_orbit(0),
+	_action_start(0),
 	_actuators{},
 	_actuator_pub(nullptr),
 	_cmd_pub(nullptr)
@@ -81,6 +82,7 @@ MissionBlock::is_mission_item_reached()
 {
 	/* handle non-navigation or indefinite waypoints */
 	switch (_mission_item.nav_cmd) {
+		// XXX: move handling to issue_command() as well
 		case NAV_CMD_DO_SET_SERVO: {
 			memset(&actuators, 0, sizeof(actuators));
 			actuators.control[_mission_item.actuator_num] = 1.0f / 2000 * -_mission_item.actuator_value;
@@ -102,20 +104,22 @@ MissionBlock::is_mission_item_reached()
 		case NAV_CMD_LOITER_UNLIMITED:
 			return false;
 
-		case vehicle_command_s::VEHICLE_CMD_DO_DIGICAM_CONTROL: /* fallthrough */
-		case vehicle_command_s::VEHICLE_CMD_DO_VTOL_TRANSITION:
-			{
-			/* forward the command to other processes */
-			warnx("got instantaneous command, forwarding.\n");
-			struct vehicle_command_s cmd = {};
-			cmd.command = _mission_item.nav_cmd;
-			mission_item_to_vehicle_command(&_mission_item, &cmd);
-			if (_cmd_pub != nullptr) {
-				orb_publish(ORB_ID(vehicle_command), _cmd_pub, &cmd);
-			} else {
-				_cmd_pub = orb_advertise(ORB_ID(vehicle_command), &cmd);
-			}
+		case NAV_CMD_DO_DIGICAM_CONTROL:
 			return true;
+
+		case NAV_CMD_DO_VTOL_TRANSITION:
+			/*
+			 * We wait half a second to give the transition command time to propagate.
+			 * As soon as the timeout is over or when we're in transition mode let the mission continue.
+			 */
+			if (hrt_absolute_time() - _action_start > 500000 ||
+					_navigator->get_vstatus()->in_transition_mode) {
+				_action_start = 0;
+
+				return true;
+
+			} else {
+				return false;
 			}
 
 		default:
@@ -245,6 +249,7 @@ MissionBlock::mission_item_to_vehicle_command(const struct mission_item_s *item,
 	cmd->param5 = item->params[4];
 	cmd->param6 = item->params[5];
 	cmd->param7 = item->params[6];
+	cmd->command = item->nav_cmd;
 
 	cmd->target_system = _navigator->get_vstatus()->system_id;
 	cmd->target_component = _navigator->get_vstatus()->component_id;
@@ -254,8 +259,45 @@ MissionBlock::mission_item_to_vehicle_command(const struct mission_item_s *item,
 }
 
 void
+MissionBlock::issue_command(const struct mission_item_s *item)
+{
+	if (item_contains_position(item)) {
+		return;
+	}
+
+	warnx("forwarding command %d\n", item->nav_cmd);
+	struct vehicle_command_s cmd = {};
+	mission_item_to_vehicle_command(item, &cmd);
+	_action_start = hrt_absolute_time();
+
+	if (_cmd_pub != nullptr) {
+		orb_publish(ORB_ID(vehicle_command), _cmd_pub, &cmd);
+
+	} else {
+		_cmd_pub = orb_advertise(ORB_ID(vehicle_command), &cmd);
+	}
+}
+
+bool
+MissionBlock::item_contains_position(const struct mission_item_s *item)
+{
+	// XXX: maybe extend that check onto item properties
+	if (item->nav_cmd == NAV_CMD_DO_DIGICAM_CONTROL ||
+			item->nav_cmd == NAV_CMD_DO_VTOL_TRANSITION) {
+		return false;
+	}
+
+	return true;
+}
+
+void
 MissionBlock::mission_item_to_position_setpoint(const struct mission_item_s *item, struct position_setpoint_s *sp)
 {
+	/* don't change the setpoint for non-position items */
+	if (!item_contains_position(item)) {
+		return;
+	}
+
 	sp->valid = true;
 	sp->lat = item->lat;
 	sp->lon = item->lon;
@@ -268,7 +310,7 @@ MissionBlock::mission_item_to_position_setpoint(const struct mission_item_s *ite
 	sp->acceptance_radius = item->acceptance_radius;
 
 	switch (item->nav_cmd) {
-	case NAV_CMD_DO_SET_SERVO:
+	case NAV_CMD_DO_SET_SERVO: // XXX: actually also a non position item
 			/* Set current position for loitering set point*/
 			sp->lat = _navigator->get_global_position()->lat;
 			sp->lon = _navigator->get_global_position()->lon;
