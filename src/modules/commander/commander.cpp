@@ -417,7 +417,7 @@ int commander_main(int argc, char *argv[])
 		/* see if we got a home position */
 		if (status.condition_home_position_valid) {
 
-			if (TRANSITION_CHANGED == arm_disarm(true, mavlink_fd_local, "command line")) {
+			if (TRANSITION_DENIED != arm_disarm(true, mavlink_fd_local, "command line")) {
 
 				vehicle_command_s cmd = {};
 				cmd.target_system = status.system_id;
@@ -1509,12 +1509,12 @@ int commander_thread_main(int argc, char *argv[])
 			/* EPH / EPV */
 			param_get(_param_eph, &eph_threshold);
 			param_get(_param_epv, &epv_threshold);
-		}
 
-		/* Set flag to autosave parameters if necessary */
-		if (updated && autosave_params != 0) {
-			/* trigger an autosave */
-			need_param_autosave = true;
+			/* Set flag to autosave parameters if necessary */
+			if (updated && autosave_params != 0 && param_changed.saved == false) {
+				/* trigger an autosave */
+				need_param_autosave = true;
+			}
 		}
 
 		orb_check(sp_man_sub, &updated);
@@ -1570,11 +1570,12 @@ int commander_thread_main(int argc, char *argv[])
 				    /* and the system is not already armed (and potentially flying) */
 				    !armed.armed) {
 
-				    	bool chAirspeed = false;
-				    	bool hotplug_timeout = hrt_elapsed_time(&commander_boot_timestamp) > HOTPLUG_SENS_TIMEOUT;
-				    	
+					bool chAirspeed = false;
+					bool hotplug_timeout = hrt_elapsed_time(&commander_boot_timestamp) > HOTPLUG_SENS_TIMEOUT;
+
 					/* Perform airspeed check only if circuit breaker is not
-					 * engaged and it's not a rotary wing */
+					 * engaged and it's not a rotary wing
+					 */
 					if (!status.circuit_breaker_engaged_airspd_check && !status.is_rotary_wing) {
 						chAirspeed = true;
 					}
@@ -2284,6 +2285,15 @@ int commander_thread_main(int argc, char *argv[])
 				mavlink_log_critical(mavlink_fd, "main state transition denied");
 			}
 
+			/* check throttle kill switch */
+			if (sp_man.kill_switch == manual_control_setpoint_s::SWITCH_POS_ON) {
+				/* set lockdown flag */
+				armed.lockdown = true;
+			} else if (sp_man.kill_switch == manual_control_setpoint_s::SWITCH_POS_OFF) {
+				armed.lockdown = false;
+			}
+			/* no else case: do not change lockdown flag in unconfigured case */
+
 		} else {
 			if (!status.rc_input_blocked && !status.rc_signal_lost) {
 				mavlink_log_critical(mavlink_fd, "MANUAL CONTROL LOST (at t=%llums)", hrt_absolute_time() / 1000);
@@ -2714,7 +2724,7 @@ control_status_leds(vehicle_status_s *status_local, const actuator_armed_s *actu
 		}
 	}
 
-#ifdef CONFIG_ARCH_BOARD_PX4FMU_V1
+#if defined (CONFIG_ARCH_BOARD_PX4FMU_V1) || defined (CONFIG_ARCH_BOARD_PX4FMU_V4)
 
 	/* this runs at around 20Hz, full cycle is 16 ticks = 10/16Hz */
 	if (actuator_armed->armed) {
@@ -3018,8 +3028,8 @@ set_control_mode()
 		control_mode.flag_control_attitude_enabled = true;
 		control_mode.flag_control_altitude_enabled = true;
 		control_mode.flag_control_climb_rate_enabled = true;
-		control_mode.flag_control_position_enabled = true;
-		control_mode.flag_control_velocity_enabled = true;
+		control_mode.flag_control_position_enabled = !status.in_transition_mode;
+		control_mode.flag_control_velocity_enabled = !status.in_transition_mode;
 		control_mode.flag_control_termination_enabled = false;
 		break;
 
@@ -3209,7 +3219,7 @@ void answer_command(struct vehicle_command_s &cmd, unsigned result,
 void *commander_low_prio_loop(void *arg)
 {
 	/* Set thread name */
-	px4_prctl(PR_SET_NAME, "commander_low_prio", getpid());
+	px4_prctl(PR_SET_NAME, "commander_low_prio", px4_getpid());
 
 	/* Subscribe to command topic */
 	int cmd_sub = orb_subscribe(ORB_ID(vehicle_command));

@@ -67,7 +67,7 @@ Tiltrotor::Tiltrotor(VtolAttitudeControl *attc) :
 	_params_handles_tiltrotor.airspeed_blend_start = param_find("VT_ARSP_BLEND");
 	_params_handles_tiltrotor.elevons_mc_lock = param_find("VT_ELEV_MC_LOCK");
 	_params_handles_tiltrotor.front_trans_dur_p2 = param_find("VT_TRANS_P2_DUR");
-	_params_handles_tiltrotor.fw_motors_off = param_find("VT_FW_MOT_OFF");
+	_params_handles_tiltrotor.fw_motors_off = param_find("VT_FW_MOT_OFFID");
 }
 
 Tiltrotor::~Tiltrotor()
@@ -145,7 +145,7 @@ int Tiltrotor::get_motor_off_channels(int channels)
 			break;
 		}
 
-		channel_bitmap |= 1 << channel;
+		channel_bitmap |= 1 << (channel - 1);
 		channels = channels / 10;
 	}
 

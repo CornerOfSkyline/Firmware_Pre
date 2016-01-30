@@ -119,7 +119,7 @@ void Simulator::pack_actuator_message(mavlink_hil_controls_t &actuator_msg)
 	actuator_msg.throttle = out[3];
 	actuator_msg.aux1 = out[4];
 	actuator_msg.aux2 = out[5];
-	actuator_msg.aux3 = out[6];
+	actuator_msg.aux3 = _actuators.output[6] > PWM_DEFAULT_MIN / 2 ? out[6] : -1.0f;;
 	actuator_msg.aux4 = out[7];
 	actuator_msg.mode = 0; // need to put something here
 	actuator_msg.nav_mode = 0;
@@ -530,6 +530,9 @@ void Simulator::pollForMAVLinkMessages(bool publish)
 	pthread_create(&sender_thread, &sender_thread_attr, Simulator::sending_trampoline, NULL);
 	pthread_attr_destroy(&sender_thread_attr);
 
+	mavlink_status_t udp_status = {};
+	mavlink_status_t serial_status = {};
+
 	// wait for new mavlink messages to arrive
 	while (true) {
 
@@ -555,10 +558,9 @@ void Simulator::pollForMAVLinkMessages(bool publish)
 
 			if (len > 0) {
 				mavlink_message_t msg;
-				mavlink_status_t status;
 
 				for (int i = 0; i < len; i++) {
-					if (mavlink_parse_char(MAVLINK_COMM_0, _buf[i], &msg, &status)) {
+					if (mavlink_parse_char(MAVLINK_COMM_0, _buf[i], &msg, &udp_status)) {
 						// have a message, handle it
 						handle_message(&msg, publish);
 					}
@@ -572,10 +574,9 @@ void Simulator::pollForMAVLinkMessages(bool publish)
 
 			if (len > 0) {
 				mavlink_message_t msg;
-				mavlink_status_t status;
 
 				for (int i = 0; i < len; ++i) {
-					if (mavlink_parse_char(MAVLINK_COMM_0, serial_buf[i], &msg, &status)) {
+					if (mavlink_parse_char(MAVLINK_COMM_1, serial_buf[i], &msg, &serial_status)) {
 						// have a message, handle it
 						handle_message(&msg, true);
 					}

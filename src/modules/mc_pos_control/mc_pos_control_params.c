@@ -72,7 +72,7 @@ PARAM_DEFINE_FLOAT(MPC_THR_MAX, 0.9f);
  * @max 1.0
  * @group Multicopter Position Control
  */
-PARAM_DEFINE_FLOAT(MPC_MANTHR_MIN, 0.12f);
+PARAM_DEFINE_FLOAT(MPC_MANTHR_MIN, 0.08f);
 
 /**
  * Maximum manual thrust
@@ -233,15 +233,6 @@ PARAM_DEFINE_FLOAT(MPC_TILTMAX_LND, 12.0f);
  * @group Multicopter Position Control
  */
 PARAM_DEFINE_FLOAT(MPC_LAND_SPEED, 0.5f);
-
-/**
- * Takeoff initial speed to jump off the ground
- *
- * @unit m/s
- * @min 0.0
- * @group Multicopter Position Control
- */
-PARAM_DEFINE_FLOAT(MPC_TKO_JMPSPD, 2.0f);
 
 /**
  * Takeoff climb rate
