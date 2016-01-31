@@ -299,7 +299,7 @@ void Standard::fill_actuator_outputs()
 			* _mc_roll_weight;	// roll
 	_actuators_out_0->control[actuator_controls_s::INDEX_PITCH] =
 		_actuators_mc_in->control[actuator_controls_s::INDEX_PITCH] * _mc_pitch_weight;	// pitch
-	_actuators_out_0->control[actuator_controls_s::INDEX_YAW] = -_actuators_mc_in->control[actuator_controls_s::INDEX_YAW] *
+	_actuators_out_0->control[actuator_controls_s::INDEX_YAW] = _actuators_mc_in->control[actuator_controls_s::INDEX_YAW] *
 			_mc_yaw_weight;	// yaw
 	_actuators_out_0->control[actuator_controls_s::INDEX_THROTTLE] =
 		_actuators_mc_in->control[actuator_controls_s::INDEX_THROTTLE] * _mc_throttle_weight;	// throttle
