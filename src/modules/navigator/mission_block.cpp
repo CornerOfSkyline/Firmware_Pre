@@ -248,18 +248,6 @@ MissionBlock::issue_command(const struct mission_item_s *item)
 		return;
 	}
 
-<<<<<<< HEAD
-	warnx("forwarding command %d\n", item->nav_cmd);
-	struct vehicle_command_s cmd = {};
-	mission_item_to_vehicle_command(item, &cmd);
-	_action_start = hrt_absolute_time();
-
-	if (_cmd_pub != nullptr) {
-		orb_publish(ORB_ID(vehicle_command), _cmd_pub, &cmd);
-
-	} else {
-		_cmd_pub = orb_advertise(ORB_ID(vehicle_command), &cmd);
-=======
 	if (item->nav_cmd == NAV_CMD_DO_SET_SERVO) {
 		PX4_WARN("do_set_servo command");
 		// XXX: we should issue a vehicle command and handle this somewhere else
@@ -288,7 +276,6 @@ MissionBlock::issue_command(const struct mission_item_s *item)
 		} else {
 			_cmd_pub = orb_advertise(ORB_ID(vehicle_command), &cmd);
 		}
->>>>>>> upstream/master
 	}
 }
 
@@ -297,12 +284,8 @@ MissionBlock::item_contains_position(const struct mission_item_s *item)
 {
 	// XXX: maybe extend that check onto item properties
 	if (item->nav_cmd == NAV_CMD_DO_DIGICAM_CONTROL ||
-<<<<<<< HEAD
-			item->nav_cmd == NAV_CMD_DO_VTOL_TRANSITION) {
-=======
 			item->nav_cmd == NAV_CMD_DO_VTOL_TRANSITION ||
 			item->nav_cmd == NAV_CMD_DO_SET_SERVO) {
->>>>>>> upstream/master
 		return false;
 	}
 
@@ -329,16 +312,6 @@ MissionBlock::mission_item_to_position_setpoint(const struct mission_item_s *ite
 	sp->acceptance_radius = item->acceptance_radius;
 
 	switch (item->nav_cmd) {
-<<<<<<< HEAD
-	case NAV_CMD_DO_SET_SERVO: // XXX: actually also a non position item
-			/* Set current position for loitering set point*/
-			sp->lat = _navigator->get_global_position()->lat;
-			sp->lon = _navigator->get_global_position()->lon;
-			sp->alt = _navigator->get_global_position()->alt;
-			sp->type = position_setpoint_s::SETPOINT_TYPE_LOITER;
-			break;
-=======
->>>>>>> upstream/master
 	case NAV_CMD_IDLE:
 		sp->type = position_setpoint_s::SETPOINT_TYPE_IDLE;
 		break;

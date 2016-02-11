@@ -60,7 +60,6 @@ VtolAttitudeControl *g_control;
 VtolAttitudeControl::VtolAttitudeControl() :
 	_task_should_exit(false),
 	_control_task(-1),
-	_mavlink_fd(-1),
 
 	// mavlink log
 	_mavlink_fd(-1),
@@ -592,9 +591,6 @@ void VtolAttitudeControl::task_main()
 	// make sure we start with idle in mc mode
 	_vtol_type->set_idle_mc();
 	
-	hrt_abstime mavlink_open_time = 0;
-	const hrt_abstime mavlink_open_interval = 500000;
-
 	hrt_abstime mavlink_open_time = 0;
 	const hrt_abstime mavlink_open_interval = 500000;
 
