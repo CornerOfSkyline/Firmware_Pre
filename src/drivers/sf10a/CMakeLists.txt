@@ -31,16 +31,13 @@
 #
 ############################################################################
 px4_add_module(
-	MODULE drivers__boards__px4fmu-v4
+
+	MODULE drivers__sf10a
+	MAIN sf10a
 	COMPILE_FLAGS
 		-Os
 	SRCS
-		px4fmu_can.c
-		px4fmu_init.c
-		px4fmu_timer_config.c
-		px4fmu_spi.c
-		px4fmu_usb.c
-		px4fmu_led.c
+		sf10a.cpp
 	DEPENDS
 		platforms__common
 	)

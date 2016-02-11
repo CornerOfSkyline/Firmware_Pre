@@ -558,6 +558,10 @@ MulticopterPositionControl::parameters_update(bool force)
 
 		param_get(_params_handles.mc_att_yaw_p, &v);
 		_params.mc_att_yaw_p = v;
+
+		/* takeoff and land velocities should not exceed maximum */
+		_params.tko_speed = fminf(_params.tko_speed, _params.vel_max(2));
+		_params.land_speed = fminf(_params.land_speed, _params.vel_max(2));
 	}
 
 	return OK;
@@ -904,9 +908,10 @@ MulticopterPositionControl::cross_sphere_line(const math::Vector<3> &sphere_c, f
 
 void MulticopterPositionControl::control_auto(float dt)
 {
+	/* reset position setpoint on AUTO mode activation or when reentering MC mode */
 	if (!_mode_auto || _vehicle_status.in_transition_mode || !_vehicle_status.is_rotary_wing) {
 		_mode_auto = true;
-		/* reset position setpoint on AUTO mode activation */
+
 		if (_vehicle_status.in_transition_mode || !_vehicle_status.is_rotary_wing) {
 			_reset_pos_sp = true;
 			_reset_alt_sp = true;
