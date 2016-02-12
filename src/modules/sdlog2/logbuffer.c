@@ -42,6 +42,7 @@
 #include <px4_defines.h>
 #include <string.h>
 #include <stdlib.h>
+ #include <errno.h>
 
 #include "logbuffer.h"
 

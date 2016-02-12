@@ -475,6 +475,8 @@ struct log_ENCD_s {
 #define LOG_VTOL_MSG 43
 struct log_VTOL_s {
 	float airspeed_tot;
+	bool  vtol_in_trans_mode;
+	bool  vtol_in_rw_mode;
 };
 
 /* --- TIMESYNC - TIME SYNCHRONISATION OFFSET */
@@ -506,6 +508,14 @@ struct log_CTS_s {
 };
 
 #define LOG_OUT1_MSG 50
+
+/* --- MISSION STATE --- */
+#define LOG_MIS_MSG 51
+struct log_MIS_s {
+	char seq_reached;
+	char seq_current;
+	bool reached;
+};
 
 /********** SYSTEM MESSAGES, ID > 0x80 **********/
 
@@ -546,7 +556,7 @@ static const struct log_format_s log_formats[] = {
 	LOG_FORMAT_S(ATTC, ATTC, "ffff",		"Roll,Pitch,Yaw,Thrust"),
 	LOG_FORMAT_S(ATC1, ATTC, "ffff",		"Roll,Pitch,Yaw,Thrust"),
 	LOG_FORMAT(STAT, "BBBfBBf",		"MainState,ArmS,Failsafe,BatRem,BatWarn,Landed,Load"),
-	LOG_FORMAT(VTOL, "f",		"Arsp"),
+	LOG_FORMAT(VTOL, "fBB",	"Arsp,Intrans,Infw"),
 	LOG_FORMAT(CTS, "fffffff", "Vx_b,Vy_b,Vz_b,Vinf,P,Q,R"),
 	LOG_FORMAT(RC, "ffffffffffffBBBL",		"C0,C1,C2,C3,C4,C5,C6,C7,C8,C9,C10,C11,RSSI,CNT,Lost,Drop"),
 	LOG_FORMAT_S(OUT0, OUT, "ffffffff",		"Out0,Out1,Out2,Out3,Out4,Out5,Out6,Out7"),
@@ -582,6 +592,7 @@ static const struct log_format_s log_formats[] = {
 	LOG_FORMAT(ENCD, "qfqf",	"cnt0,vel0,cnt1,vel1"),
 	LOG_FORMAT(TSYN, "Q", 		"TimeOffset"),
 	LOG_FORMAT(MACS, "fff", "RRint,PRint,YRint"),
+	LOG_FORMAT(MIS, "BBB", "SeqReached,SeqCurrent,Reached"),
 
 	/* system-level messages, ID >= 0x80 */
 	/* FMT: don't write format of format message, it's useless */

@@ -110,6 +110,7 @@
 #include <uORB/topics/time_offset.h>
 #include <uORB/topics/mc_att_ctrl_status.h>
 #include <uORB/topics/ekf2_innovations.h>
+#include <uORB/topics/mission_result.h>
 
 #include <systemlib/systemlib.h>
 #include <systemlib/param/param.h>
@@ -1098,6 +1099,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 		struct mc_att_ctrl_status_s mc_att_ctrl_status;
 		struct control_state_s ctrl_state;
 		struct ekf2_innovations_s innovations;
+		struct mission_result_s mission_result;
 	} buf;
 
 	memset(&buf, 0, sizeof(buf));
@@ -1149,6 +1151,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 			struct log_CTS_s log_CTS;
 			struct log_EST4_s log_INO1;
 			struct log_EST5_s log_INO2;
+			struct log_MIS_s log_MIS;
 		} body;
 	} log_msg = {
 		LOG_PACKET_HEADER_INIT(0)
@@ -1194,6 +1197,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 		int mc_att_ctrl_status_sub;
 		int ctrl_state_sub;
 		int innov_sub;
+		int mission_result_sub;
 	} subs;
 
 	subs.cmd_sub = -1;
@@ -1231,6 +1235,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 	subs.ctrl_state_sub = -1;
 	subs.encoders_sub = -1;
 	subs.innov_sub = -1;
+	subs.mission_result_sub = -1;
 
 	/* add new topics HERE */
 
@@ -1279,6 +1284,8 @@ int sdlog2_thread_main(int argc, char *argv[])
 
 	/* running, report */
 	thread_running = true;
+
+	struct mission_result_s mission_result_temp;
 
 	while (!main_thread_should_exit) {
 		usleep(sleep_delay);
@@ -1329,12 +1336,35 @@ int sdlog2_thread_main(int argc, char *argv[])
 			LOGBUFFER_WRITE_AND_COUNT(STAT);
 		}
 
+		/* --- MISSION RESULT STATUS --- */
+		if(copy_if_updated(ORB_ID(mission_result), &subs.mission_result_sub, &mission_result_temp)) {
+			log_msg.msg_type = LOG_MIS_MSG;
+			log_msg.body.log_MIS.seq_reached = mission_result_temp.seq_reached;
+			log_msg.body.log_MIS.seq_current = mission_result_temp.seq_current;
+			log_msg.body.log_MIS.reached =mission_result_temp.reached;
+			//LOGBUFFER_WRITE_AND_COUNT(MIS);
+			warnx("seq_reached = %d",log_msg.body.log_MIS.seq_reached);
+			warnx("seq_current = %d",log_msg.body.log_MIS.seq_current);
+			warnx("reached = %d",log_msg.body.log_MIS.reached);
+		}
+
+
+
 		/* --- VTOL VEHICLE STATUS --- */
 		if(copy_if_updated(ORB_ID(vtol_vehicle_status), &subs.vtol_status_sub, &buf.vtol_status)) {
 			log_msg.msg_type = LOG_VTOL_MSG;
 			log_msg.body.log_VTOL.airspeed_tot = buf.vtol_status.airspeed_tot;
+			log_msg.body.log_VTOL.vtol_in_trans_mode = buf.vtol_status.vtol_in_trans_mode;
+			log_msg.body.log_VTOL.vtol_in_rw_mode = buf.vtol_status.vtol_in_rw_mode;
 			LOGBUFFER_WRITE_AND_COUNT(VTOL);
+
+			log_msg.msg_type = LOG_MIS_MSG;
+			log_msg.body.log_MIS.seq_reached = mission_result_temp.seq_reached;
+			log_msg.body.log_MIS.seq_current = mission_result_temp.seq_current;
+			log_msg.body.log_MIS.reached =mission_result_temp.reached;
+			LOGBUFFER_WRITE_AND_COUNT(MIS);
 		}
+
 
 		/* --- GPS POSITION - UNIT #1 --- */
 		if (gps_pos_updated) {
