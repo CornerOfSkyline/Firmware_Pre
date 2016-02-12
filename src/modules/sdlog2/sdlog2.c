@@ -1337,18 +1337,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 		}
 
 		/* --- MISSION RESULT STATUS --- */
-		if(copy_if_updated(ORB_ID(mission_result), &subs.mission_result_sub, &mission_result_temp)) {
-			log_msg.msg_type = LOG_MIS_MSG;
-			log_msg.body.log_MIS.seq_reached = mission_result_temp.seq_reached;
-			log_msg.body.log_MIS.seq_current = mission_result_temp.seq_current;
-			log_msg.body.log_MIS.reached =mission_result_temp.reached;
-			//LOGBUFFER_WRITE_AND_COUNT(MIS);
-			warnx("seq_reached = %d",log_msg.body.log_MIS.seq_reached);
-			warnx("seq_current = %d",log_msg.body.log_MIS.seq_current);
-			warnx("reached = %d",log_msg.body.log_MIS.reached);
-		}
-
-
+		copy_if_updated(ORB_ID(mission_result), &subs.mission_result_sub, &mission_result_temp);
 
 		/* --- VTOL VEHICLE STATUS --- */
 		if(copy_if_updated(ORB_ID(vtol_vehicle_status), &subs.vtol_status_sub, &buf.vtol_status)) {
