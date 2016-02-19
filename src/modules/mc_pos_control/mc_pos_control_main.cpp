@@ -224,6 +224,7 @@ private:
 	struct map_projection_reference_s _ref_pos;
 	float _ref_alt;
 	hrt_abstime _ref_timestamp;
+	hrt_abstime _landing_pitchrate_detector_start;
 
 	bool _reset_pos_sp;
 	bool _reset_alt_sp;
@@ -250,6 +251,8 @@ private:
 	float _vel_z_lp;
 	float _acc_z_lp;
 	float _takeoff_thrust_sp;
+
+	bool _in_landing_temp;
 
 	/**
 	 * Update our local parameter cache.
@@ -365,6 +368,7 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	_vel_z_deriv(this, "VELD"),
 	_ref_alt(0.0f),
 	_ref_timestamp(0),
+	_landing_pitchrate_detector_start(0),
 
 	_reset_pos_sp(true),
 	_reset_alt_sp(true),
@@ -378,7 +382,8 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	_takeoff_jumped(false),
 	_vel_z_lp(0),
 	_acc_z_lp(0),
-	_takeoff_thrust_sp(0.0f)
+	_takeoff_thrust_sp(0.0f),
+	_in_landing_temp(false)
 {
 	memset(&_vehicle_status, 0, sizeof(_vehicle_status));
 	memset(&_ctrl_state, 0, sizeof(_ctrl_state));
@@ -1532,7 +1537,29 @@ MulticopterPositionControl::task_main()
 						if (!_in_landing
 								&& (float)fabs(_acc_z_lp) < 0.1f
 								&& _vel_z_lp > 0.5f * _params.land_speed) {
-							_in_landing = true;
+							//_in_landing = true;
+							_in_landing_temp = true;
+							_landing_pitchrate_detector_start = hrt_absolute_time();
+							//warnx("_in_landing_temp = true");
+						}
+
+						if(_in_landing_temp)
+						{
+							if(fabs(_ctrl_state.pitch_rate ) < (double)(3.0f / 57.3f))
+							{
+								if((float)hrt_elapsed_time(&_landing_pitchrate_detector_start) > (2.0f * 1000000.0f))
+								{
+									_in_landing = true;
+									warnx("_in_landing = true");
+								}															
+							}
+							else
+							{
+								_in_landing_temp = false;
+								_in_landing = false;
+								_landing_pitchrate_detector_start = hrt_absolute_time();
+							}	
+							//warnx("Dt = %d", hrt_elapsed_time(&_landing_pitchrate_detector_start));
 						}
 
 						/* assume ground, reduce thrust */
@@ -1550,10 +1577,14 @@ MulticopterPositionControl::task_main()
 								) {
 							thr_max = _params.thr_max;
 							_in_landing = false;
+							_in_landing_temp = false;
+							_landing_pitchrate_detector_start = hrt_absolute_time();
 						}
 
 					} else {
 						_in_landing = false;
+						_in_landing_temp = false;
+						_landing_pitchrate_detector_start = hrt_absolute_time();
 					}
 
 					/* limit min lift */

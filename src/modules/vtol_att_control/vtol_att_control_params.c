@@ -223,3 +223,14 @@ PARAM_DEFINE_INT32(VT_OPT_RECOV_EN, 0);
  * @group VTOL Attitude Control
  */
 PARAM_DEFINE_FLOAT(VT_TRANS_TIMEOUT, 15.0f);
+
+/**
+ * FW low speed safety.
+ *
+ * True Airspeed below this value will be change to MC mode and RTL. Disabled if set to 0.
+ *
+ * @min 0.0
+ * @max 20.0
+ * @group VTOL Attitude Control
+ */
+//PARAM_DEFINE_FLOAT(VT_LOWSPEED_SAFETY, 15.0f);

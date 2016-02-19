@@ -203,6 +203,7 @@ private:
 		param_t arsp_lp_gain;
 		param_t vtol_type;
 		param_t elevons_mc_lock;
+		//param_t fw_lowspeed_safety;
 	} _params_handles;
 
 	/* for multicopters it is usual to have a non-zero idle speed of the engines
@@ -210,6 +211,8 @@ private:
 	 * to waste energy when gliding. */
 	int _transition_command;
 	bool _abort_front_transition;
+
+	//float fw_lowspeed_safety;
 
 	VtolType *_vtol_type;	// base class for different vtol types
 	Tiltrotor *_tiltrotor;	// tailsitter vtol type

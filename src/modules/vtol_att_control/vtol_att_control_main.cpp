@@ -126,6 +126,7 @@ VtolAttitudeControl::VtolAttitudeControl() :
 	_params_handles.arsp_lp_gain = param_find("VT_ARSP_LP_GAIN");
 	_params_handles.vtol_type = param_find("VT_TYPE");
 	_params_handles.elevons_mc_lock = param_find("VT_ELEV_MC_LOCK");
+	//_params_handles.fw_lowspeed_safety = param_find("VT_LOWSPEED_SAFETY");
 
 	/* fetch initial parameter values */
 	parameters_update();
@@ -513,6 +514,10 @@ VtolAttitudeControl::parameters_update()
 	param_get(_params_handles.elevons_mc_lock, &l);
 	_params.elevons_mc_lock = l;
 
+	/* vtol lock elevons in multicopter */
+	//param_get(_params_handles.fw_lowspeed_safety, &v);
+	//fw_lowspeed_safety = v;
+
 	return OK;
 }
 
@@ -714,6 +719,12 @@ void VtolAttitudeControl::task_main()
 				_vtol_type->update_fw_state();
 
 				fill_fw_att_rates_sp();
+			}
+
+			if((_airspeed.true_airspeed_m_s  < 12) || (_v_att.pitch > (float)(60/57.3)) ||  (_v_att.pitch < (float)(-60/57.3)) || (_v_att.roll > (float)(60/57.3)) ||  (_v_att.roll < (float)(-60/57.3)))
+			{
+				//lowspeedsafety = true;
+				abort_front_transition();
 			}
 
 		} else if (_vtol_type->get_mode() == TRANSITION) {
