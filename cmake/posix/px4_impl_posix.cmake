@@ -87,7 +87,7 @@ function(px4_posix_generate_builtin_commands)
 		set(MAIN_DEFAULT MAIN-NOTFOUND)
 		set(STACK_DEFAULT 1024)
 		set(PRIORITY_DEFAULT SCHED_PRIORITY_DEFAULT)
-		foreach(property MAIN STACK PRIORITY) 
+		foreach(property MAIN STACK PRIORITY)
 			get_target_property(${property} ${module} ${property})
 			if(NOT ${property})
 				set(${property} ${${property}_DEFAULT})
@@ -166,6 +166,15 @@ function(px4_os_add_flags)
                 mavlink/include/mavlink
                 )
 
+# Use the pthread instead of lpthread if the firmware is build for the parrot
+# bebop. This resolves some linker errors in DriverFramework, when building a 
+# static target.
+if ("${BOARD}" STREQUAL "bebop")
+  set(PX4_PTHREAD_BUILD "-pthread")
+else()
+  set(PX4_PTHREAD_BUILD "-lpthread")
+endif()
+
 if(UNIX AND APPLE)
         set(added_definitions
 		-D__PX4_POSIX
@@ -177,30 +186,50 @@ if(UNIX AND APPLE)
                 )
 
         set(added_exe_linker_flags
-		-lpthread
+          ${PX4_PTHREAD_BUILD}
 		)
 
 else()
 
         set(added_definitions
 		-D__PX4_POSIX
-		-D__PX4_LINUX 
-		-D__DF_LINUX 
+		-D__PX4_LINUX
+		-D__DF_LINUX
 		-DCLOCK_MONOTONIC=1
 		-Dnoreturn_function=__attribute__\(\(noreturn\)\)
 		-include ${PX4_INCLUDE_DIR}visibility.h
                 )
 
         set(added_exe_linker_flags
-		-lpthread -lrt
+		      ${PX4_PTHREAD_BUILD} -lrt
 		)
 
 endif()
-	
+
+if ("${BOARD}" STREQUAL "eagle" OR "${BOARD}" STREQUAL "excelsior")
+
+	if ("$ENV{HEXAGON_ARM_SYSROOT}" STREQUAL "")
+		message(FATAL_ERROR "HEXAGON_ARM_SYSROOT not set")
+	else()
+		set(HEXAGON_ARM_SYSROOT $ENV{HEXAGON_ARM_SYSROOT})
+	endif()
+
+	# Add the toolchain specific flags
+        set(added_cflags ${POSIX_CMAKE_C_FLAGS} --sysroot=${HEXAGON_ARM_SYSROOT})
+        set(added_cxx_flags ${POSIX_CMAKE_CXX_FLAGS} --sysroot=${HEXAGON_ARM_SYSROOT})
+
+        list(APPEND added_exe_linker_flags
+		-Wl,-rpath-link,${HEXAGON_ARM_SYSROOT}/usr/lib/arm-linux-gnueabihf
+		-Wl,-rpath-link,${HEXAGON_ARM_SYSROOT}/lib/arm-linux-gnueabihf
+		--sysroot=${HEXAGON_ARM_SYSROOT}
+		)
+else()
 
 	# Add the toolchain specific flags
         set(added_cflags ${POSIX_CMAKE_C_FLAGS})
         set(added_cxx_flags ${POSIX_CMAKE_CXX_FLAGS})
+
+endif()
 
 	# output
 	foreach(var ${inout_vars})

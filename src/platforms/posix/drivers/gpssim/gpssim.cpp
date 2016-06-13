@@ -282,9 +282,10 @@ GPSSIM::receive(int timeout)
 	_report_gps_pos.lat = gps.lat;
 	_report_gps_pos.lon = gps.lon;
 	_report_gps_pos.alt = gps.alt;
-	_report_gps_pos.timestamp_variance = hrt_absolute_time();
+	_report_gps_pos.timestamp_variance = _report_gps_pos.timestamp_position;
 	_report_gps_pos.eph = (float)gps.eph * 1e-2f;
 	_report_gps_pos.epv = (float)gps.epv * 1e-2f;
+	_report_gps_pos.timestamp_velocity = _report_gps_pos.timestamp_position;
 	_report_gps_pos.vel_m_s = (float)(gps.vel) / 100.0f;
 	_report_gps_pos.vel_n_m_s = (float)(gps.vn) / 100.0f;
 	_report_gps_pos.vel_e_m_s = (float)(gps.ve) / 100.0f;
@@ -309,13 +310,13 @@ GPSSIM::task_main()
 			_report_gps_pos.lat = (int32_t)47.378301e7f;
 			_report_gps_pos.lon = (int32_t)8.538777e7f;
 			_report_gps_pos.alt = (int32_t)1200e3f;
-			_report_gps_pos.timestamp_variance = hrt_absolute_time();
+			_report_gps_pos.timestamp_variance = _report_gps_pos.timestamp_position;
 			_report_gps_pos.s_variance_m_s = 10.0f;
 			_report_gps_pos.c_variance_rad = 0.1f;
 			_report_gps_pos.fix_type = 3;
 			_report_gps_pos.eph = 0.9f;
 			_report_gps_pos.epv = 1.8f;
-			_report_gps_pos.timestamp_velocity = hrt_absolute_time();
+			_report_gps_pos.timestamp_velocity = _report_gps_pos.timestamp_position;
 			_report_gps_pos.vel_n_m_s = 0.0f;
 			_report_gps_pos.vel_e_m_s = 0.0f;
 			_report_gps_pos.vel_d_m_s = 0.0f;
@@ -441,6 +442,7 @@ void	stop();
 void	test();
 void	reset();
 void	info();
+void	usage(const char *reason);
 
 /**
  * Start the driver.
@@ -465,7 +467,7 @@ start(const char *uart_path, bool fake_gps, bool enable_sat_info)
 	DevMgr::getHandle(GPSSIM_DEVICE_PATH, h);
 
 	if (!h.isValid()) {
-		PX4_ERR("getHandle failed: %s", GPS0_DEVICE_PATH);
+		PX4_ERR("getHandle failed: %s", GPSSIM_DEVICE_PATH);
 		goto fail;
 	}
 
@@ -528,12 +530,26 @@ info()
 {
 	if (g_dev == nullptr) {
 		PX4_ERR("gpssim not running");
+		return;
 	}
 
 	g_dev->print_info();
 }
 
+void
+usage(const char *reason)
+{
+	if (reason) {
+		PX4_WARN("%s", reason);
+	}
+
+	PX4_INFO("usage:");
+	PX4_INFO("gpssim {start|stop|test|reset|status}");
+	PX4_INFO("       [-d /dev/ttyS0-n][-f (for enabling fake)][-s (to enable sat info)]");
+}
+
 } // namespace
+
 
 
 int
@@ -545,22 +561,25 @@ gpssim_main(int argc, char *argv[])
 	bool fake_gps = false;
 	bool enable_sat_info = false;
 
+
+	if (argc < 2) {
+
+		gpssim::usage("not enough arguments supplied");
+		return 1;
+	}
+
 	/*
 	 * Start/load the driver.
 	 */
 	if (!strcmp(argv[1], "start")) {
 		if (g_dev != nullptr) {
-			PX4_WARN("gpssim already started");
+			PX4_WARN("already started");
 			return 0;
 		}
 
-		/* work around getopt unreliability */
 		if (argc > 3) {
 			if (!strcmp(argv[2], "-d")) {
 				device_name = argv[3];
-
-			} else {
-				goto out;
 			}
 		}
 
@@ -579,6 +598,13 @@ gpssim_main(int argc, char *argv[])
 		}
 
 		gpssim::start(device_name, fake_gps, enable_sat_info);
+		return 0;
+	}
+
+	/* The following need gpssim running. */
+	if (g_dev == nullptr) {
+		PX4_WARN("not running");
+		return 1;
 	}
 
 	if (!strcmp(argv[1], "stop")) {
@@ -607,8 +633,4 @@ gpssim_main(int argc, char *argv[])
 	}
 
 	return 0;
-
-out:
-	PX4_INFO("unrecognized command, try 'start', 'stop', 'test', 'reset' or 'status'\n [-d /dev/ttyS0-n][-f (for enabling fake)][-s (to enable sat info)]");
-	return 1;
 }

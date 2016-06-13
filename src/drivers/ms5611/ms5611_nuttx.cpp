@@ -98,7 +98,7 @@ static const int ERROR = -1;
  */
 
 /* internal conversion time: 9.17 ms, so should not be read at rates higher than 100 Hz */
-#define MS5611_CONVERSION_INTERVAL	10000	/* microseconds */
+#define MS5611_CONVERSION_INTERVAL	40000	/* microseconds */
 #define MS5611_MEASUREMENT_RATIO	3	/* pressure measurements per temperature measurement */
 #define MS5611_BARO_DEVICE_PATH_EXT	"/dev/ms5611_ext"
 #define MS5611_BARO_DEVICE_PATH_INT	"/dev/ms5611_int"
@@ -231,8 +231,8 @@ MS5611::MS5611(device::Device *interface, ms5611::prom_u &prom_buf, const char *
 	_class_instance(-1),
 	_sample_perf(perf_alloc(PC_ELAPSED, "ms5611_read")),
 	_measure_perf(perf_alloc(PC_ELAPSED, "ms5611_measure")),
-	_comms_errors(perf_alloc(PC_COUNT, "ms5611_comms_errors")),
-	_buffer_overflows(perf_alloc(PC_COUNT, "ms5611_buffer_overflows"))
+	_comms_errors(perf_alloc(PC_COUNT, "ms5611_com_err")),
+	_buffer_overflows(perf_alloc(PC_COUNT, "ms5611_buf_of"))
 {
 	// work_cancel in stop_cycle called from the dtor will explode if we don't do this...
 	memset(&_work, 0, sizeof(_work));
@@ -486,14 +486,14 @@ MS5611::ioctl(struct file *filp, int cmd, unsigned long arg)
 				return -EINVAL;
 			}
 
-			irqstate_t flags = irqsave();
+			irqstate_t flags = px4_enter_critical_section();
 
 			if (!_reports->resize(arg)) {
-				irqrestore(flags);
+				px4_leave_critical_section(flags);
 				return -ENOMEM;
 			}
 
-			irqrestore(flags);
+			px4_leave_critical_section(flags);
 			return OK;
 		}
 
@@ -963,7 +963,7 @@ start(enum MS5611_BUS busid)
 			continue;
 		}
 
-		started = started || start_bus(bus_options[i]);
+		started = started | start_bus(bus_options[i]);
 	}
 
 	if (!started) {

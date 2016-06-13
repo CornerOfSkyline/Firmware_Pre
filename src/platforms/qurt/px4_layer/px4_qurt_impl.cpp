@@ -71,6 +71,7 @@ unsigned int sleep(unsigned int sec)
 }
 
 extern void hrt_init(void);
+extern void init_params();
 
 #if 0
 void qurt_log(const char *fmt, ...)
@@ -98,16 +99,16 @@ void init_once(void)
 {
 	// Required for QuRT
 	//_posix_init();
-	PX4_WARN("Before calling work_queue_init");
 
 //	_shell_task_id = pthread_self();
 //	PX4_INFO("Shell id is %lu", _shell_task_id);
 
 	work_queues_init();
-	PX4_WARN("Before calling hrt_init");
 	hrt_work_queue_init();
 	hrt_init();
-	PX4_WARN("after calling hrt_init");
+
+	/* Shared memory param sync*/
+	init_params();
 }
 
 void init(int argc, char *argv[], const char *app_name)
@@ -153,12 +154,13 @@ size_t strnlen(const char *s, size_t maxlen)
 	return i;
 }
 
-int ioctl(int a, int b, unsigned long c)
+int fprintf(FILE *stream, const char *format, ...)
 {
-	return -1;
+	PX4_ERR("Error: Calling unresolved symbol stub:[%s(%s,...)]", __FUNCTION__, format);
+	return 0;
 }
 
-int write(int a, char const *b, int c)
+int fputc(int c, FILE *stream)
 {
-	return -1;
+	return c;
 }

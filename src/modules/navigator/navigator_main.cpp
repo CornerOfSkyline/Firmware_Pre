@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2013-2015 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2013-2016 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -70,7 +70,7 @@
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/mission.h>
 #include <uORB/topics/fence.h>
-#include <uORB/topics/navigation_capabilities.h>
+#include <uORB/topics/fw_pos_ctrl_status.h>
 #include <uORB/topics/vehicle_command.h>
 #include <drivers/drv_baro.h>
 
@@ -79,7 +79,7 @@
 #include <geo/geo.h>
 #include <dataman/dataman.h>
 #include <mathlib/mathlib.h>
-#include <mavlink/mavlink_log.h>
+#include <systemlib/mavlink_log.h>
 
 #include "navigator.h"
 
@@ -102,12 +102,13 @@ Navigator::Navigator() :
 	SuperBlock(NULL, "NAV"),
 	_task_should_exit(false),
 	_navigator_task(-1),
-	_mavlink_fd(-1),
+	_mavlink_log_pub(nullptr),
 	_global_pos_sub(-1),
 	_gps_pos_sub(-1),
 	_home_pos_sub(-1),
 	_vstatus_sub(-1),
-	_capabilities_sub(-1),
+	_land_detected_sub(-1),
+	_fw_pos_ctrl_status_sub(-1),
 	_control_mode_sub(-1),
 	_onboard_mission_sub(-1),
 	_offboard_mission_sub(-1),
@@ -118,20 +119,23 @@ Navigator::Navigator() :
 	_geofence_result_pub(nullptr),
 	_att_sp_pub(nullptr),
 	_vstatus{},
+	_land_detected{},
 	_control_mode{},
 	_global_pos{},
 	_gps_pos{},
 	_sensor_combined{},
 	_home_pos{},
 	_mission_item{},
-	_nav_caps{},
+	_fw_pos_ctrl_status{},
 	_pos_sp_triplet{},
+	_reposition_triplet{},
+	_takeoff_triplet{},
 	_mission_result{},
 	_att_sp{},
 	_mission_item_valid(false),
 	_mission_instance_count(0),
 	_loop_perf(perf_alloc(PC_ELAPSED, "navigator")),
-	_geofence{},
+	_geofence(this),
 	_geofence_violation_warning_sent(false),
 	_inside_fence(true),
 	_can_loiter_at_sp(false),
@@ -148,10 +152,14 @@ Navigator::Navigator() :
 	_dataLinkLoss(this, "DLL"),
 	_engineFailure(this, "EF"),
 	_gpsFailure(this, "GPSF"),
+	_follow_target(this, "TAR"),
 	_param_loiter_radius(this, "LOITER_RAD"),
 	_param_acceptance_radius(this, "ACC_RAD"),
-	_param_datalinkloss_obc(this, "DLL_OBC"),
-	_param_rcloss_obc(this, "RCL_OBC")
+	_param_datalinkloss_act(this, "DLL_ACT"),
+	_param_rcloss_act(this, "RCL_ACT"),
+	_param_cruising_speed_hover(this, "MPC_XY_CRUISE", false),
+	_param_cruising_speed_plane(this, "FW_AIRSPD_TRIM", false),
+	_mission_cruising_speed(-1.0f)
 {
 	/* Create a list of our possible navigation types */
 	_navigation_mode_array[0] = &_mission;
@@ -163,6 +171,7 @@ Navigator::Navigator() :
 	_navigation_mode_array[6] = &_rcLoss;
 	_navigation_mode_array[7] = &_takeoff;
 	_navigation_mode_array[8] = &_land;
+	_navigation_mode_array[9] = &_follow_target;
 
 	updateParams();
 }
@@ -222,9 +231,9 @@ Navigator::home_position_update(bool force)
 }
 
 void
-Navigator::navigation_capabilities_update()
+Navigator::fw_pos_ctrl_status_update()
 {
-	orb_copy(ORB_ID(navigation_capabilities), _capabilities_sub, &_nav_caps);
+	orb_copy(ORB_ID(fw_pos_ctrl_status), _fw_pos_ctrl_status_sub, &_fw_pos_ctrl_status);
 }
 
 void
@@ -234,6 +243,12 @@ Navigator::vehicle_status_update()
 		/* in case the commander is not be running */
 		_vstatus.arming_state = vehicle_status_s::ARMING_STATE_STANDBY;
 	}
+}
+
+void
+Navigator::vehicle_land_detected_update()
+{
+	orb_copy(ORB_ID(vehicle_land_detected), _land_detected_sub, &_land_detected);
 }
 
 void
@@ -262,9 +277,6 @@ Navigator::task_main_trampoline(int argc, char *argv[])
 void
 Navigator::task_main()
 {
-	_mavlink_fd = px4_open(MAVLINK_LOG_DEVICE, 0);
-	_geofence.setMavlinkFd(_mavlink_fd);
-
 	bool have_geofence_position_data = false;
 
 	/* Try to load the geofence:
@@ -278,7 +290,7 @@ Navigator::task_main()
 
 	} else {
 		if (_geofence.clearDm() != OK) {
-			mavlink_log_critical(_mavlink_fd, "failed clearing geofence");
+			mavlink_log_critical(&_mavlink_log_pub, "failed clearing geofence");
 		}
 	}
 
@@ -286,8 +298,9 @@ Navigator::task_main()
 	_global_pos_sub = orb_subscribe(ORB_ID(vehicle_global_position));
 	_gps_pos_sub = orb_subscribe(ORB_ID(vehicle_gps_position));
 	_sensor_combined_sub = orb_subscribe(ORB_ID(sensor_combined));
-	_capabilities_sub = orb_subscribe(ORB_ID(navigation_capabilities));
+	_fw_pos_ctrl_status_sub = orb_subscribe(ORB_ID(fw_pos_ctrl_status));
 	_vstatus_sub = orb_subscribe(ORB_ID(vehicle_status));
+	_land_detected_sub = orb_subscribe(ORB_ID(vehicle_land_detected));
 	_control_mode_sub = orb_subscribe(ORB_ID(vehicle_control_mode));
 	_home_pos_sub = orb_subscribe(ORB_ID(home_position));
 	_onboard_mission_sub = orb_subscribe(ORB_ID(onboard_mission));
@@ -297,23 +310,23 @@ Navigator::task_main()
 
 	/* copy all topics first time */
 	vehicle_status_update();
+	vehicle_land_detected_update();
 	vehicle_control_mode_update();
 	global_position_update();
 	gps_position_update();
 	sensor_combined_update();
 	home_position_update(true);
-	navigation_capabilities_update();
+	fw_pos_ctrl_status_update();
 	params_update();
 
-	hrt_abstime mavlink_open_time = 0;
-	const hrt_abstime mavlink_open_interval = 500000;
-
 	/* wakeup source(s) */
-	px4_pollfd_struct_t fds[1] = {};
+	px4_pollfd_struct_t fds[2] = {};
 
 	/* Setup of loop */
 	fds[0].fd = _global_pos_sub;
 	fds[0].events = POLLIN;
+	fds[1].fd = _vehicle_command_sub;
+	fds[1].events = POLLIN;
 
 	bool global_pos_available_once = false;
 
@@ -325,25 +338,20 @@ Navigator::task_main()
 		if (pret == 0) {
 			/* timed out - periodic check for _task_should_exit, etc. */
 			if (global_pos_available_once) {
-				PX4_WARN("navigator timed out");
+				PX4_WARN("no GPS - navigator timed out");
+				global_pos_available_once = false;
 			}
 			continue;
 
 		} else if (pret < 0) {
 			/* this is undesirable but not much we can do - might want to flag unhappy status */
-			PX4_WARN("poll error %d, %d", pret, errno);
+			PX4_WARN("nav: poll error %d, %d", pret, errno);
 			continue;
 		}
 
 		global_pos_available_once = true;
 
 		perf_begin(_loop_perf);
-
-		if (_mavlink_fd < 0 && hrt_absolute_time() > mavlink_open_time) {
-			/* try to reopen the mavlink log device with specified interval */
-			mavlink_open_time = hrt_abstime() + mavlink_open_interval;
-			_mavlink_fd = px4_open(MAVLINK_LOG_DEVICE, 0);
-		}
 
 		bool updated;
 
@@ -381,10 +389,16 @@ Navigator::task_main()
 			vehicle_status_update();
 		}
 
-		/* navigation capabilities updated */
-		orb_check(_capabilities_sub, &updated);
+		/* vehicle land detected updated */
+		orb_check(_land_detected_sub, &updated);
 		if (updated) {
-			navigation_capabilities_update();
+			vehicle_land_detected_update();
+		}
+
+		/* navigation capabilities updated */
+		orb_check(_fw_pos_ctrl_status_sub, &updated);
+		if (updated) {
+			fw_pos_ctrl_status_update();
 		}
 
 		/* home position updated */
@@ -398,8 +412,67 @@ Navigator::task_main()
 			vehicle_command_s cmd;
 			orb_copy(ORB_ID(vehicle_command), _vehicle_command_sub, &cmd);
 
-			if (cmd.command == vehicle_command_s::VEHICLE_CMD_NAV_TAKEOFF) {
-				warnx("navigator: got takeoff coordinates");
+			if (cmd.command == vehicle_command_s::VEHICLE_CMD_DO_REPOSITION) {
+
+				struct position_setpoint_triplet_s *rep = get_reposition_triplet();
+
+				// store current position as previous position and goal as next
+				rep->previous.yaw = get_global_position()->yaw;
+				rep->previous.lat = get_global_position()->lat;
+				rep->previous.lon = get_global_position()->lon;
+				rep->previous.alt = get_global_position()->alt;
+
+				rep->current.loiter_radius = get_loiter_radius();
+				rep->current.loiter_direction = 1;
+				rep->current.type = position_setpoint_s::SETPOINT_TYPE_LOITER;
+
+				// Go on and check which changes had been requested
+				if (PX4_ISFINITE(cmd.param4)) {
+					rep->current.yaw = cmd.param4;
+				} else {
+					rep->current.yaw = NAN;
+				}
+
+				if (PX4_ISFINITE(cmd.param5) && PX4_ISFINITE(cmd.param6)) {
+					rep->current.lat = cmd.param5 / (double)1e7;
+					rep->current.lon = cmd.param6 / (double)1e7;
+				} else {
+					rep->current.lat = get_global_position()->lat;
+					rep->current.lon = get_global_position()->lon;
+				}
+
+				if (PX4_ISFINITE(cmd.param7)) {
+					rep->current.alt = cmd.param7;
+				} else {
+					rep->current.alt = get_global_position()->alt;
+				}
+
+				rep->previous.valid = true;
+				rep->current.valid = true;
+				rep->next.valid = false;
+			} else if (cmd.command == vehicle_command_s::VEHICLE_CMD_NAV_TAKEOFF) {
+				struct position_setpoint_triplet_s *rep = get_takeoff_triplet();
+
+				// store current position as previous position and goal as next
+				rep->previous.yaw = get_global_position()->yaw;
+				rep->previous.lat = get_global_position()->lat;
+				rep->previous.lon = get_global_position()->lon;
+				rep->previous.alt = get_global_position()->alt;
+
+				rep->current.loiter_radius = get_loiter_radius();
+				rep->current.loiter_direction = 1;
+				rep->current.type = position_setpoint_s::SETPOINT_TYPE_TAKEOFF;
+				rep->current.yaw = cmd.param4;
+				rep->current.lat = cmd.param5 / (double)1e7;
+				rep->current.lon = cmd.param6 / (double)1e7;
+				rep->current.alt = cmd.param7;
+
+				rep->previous.valid = true;
+				rep->current.valid = true;
+				rep->next.valid = false;
+
+			} else if (cmd.command == vehicle_command_s::VEHICLE_CMD_DO_PAUSE_CONTINUE) {
+				warnx("navigator: got pause/continue command");
 			}
 		}
 
@@ -428,7 +501,7 @@ Navigator::task_main()
 
 				/* Issue a warning about the geofence violation once */
 				if (!_geofence_violation_warning_sent) {
-					mavlink_log_critical(_mavlink_fd, "Geofence violation");
+					mavlink_log_critical(&_mavlink_log_pub, "Geofence violation");
 					_geofence_violation_warning_sent = true;
 				}
 			} else {
@@ -452,7 +525,7 @@ Navigator::task_main()
 				_can_loiter_at_sp = false;
 				break;
 			case vehicle_status_s::NAVIGATION_STATE_AUTO_MISSION:
-				if (_nav_caps.abort_landing) {
+				if (_fw_pos_ctrl_status.abort_landing) {
 					// pos controller aborted landing, requests loiter
 					// above landing waypoint
 					_navigation_mode = &_loiter;
@@ -468,9 +541,13 @@ Navigator::task_main()
 				break;
 			case vehicle_status_s::NAVIGATION_STATE_AUTO_RCRECOVER:
 				_pos_sp_triplet_published_invalid_once = false;
-				if (_param_rcloss_obc.get() != 0) {
+				if (_param_rcloss_act.get() == 1) {
+					_navigation_mode = &_loiter;
+				} else if (_param_rcloss_act.get() == 3) {
+					_navigation_mode = &_land;
+				} else if (_param_rcloss_act.get() == 4) {
 					_navigation_mode = &_rcLoss;
-				} else {
+				} else { /* if == 2 or unknown, RTL */
 					_navigation_mode = &_rtl;
 				}
 				break;
@@ -482,7 +559,11 @@ Navigator::task_main()
 				_pos_sp_triplet_published_invalid_once = false;
 				_navigation_mode = &_takeoff;
 				break;
-			case vehicle_status_s::NAVIGATION_STATE_LAND:
+			case vehicle_status_s::NAVIGATION_STATE_AUTO_LAND:
+				_pos_sp_triplet_published_invalid_once = false;
+				_navigation_mode = &_land;
+				break;
+			case vehicle_status_s::NAVIGATION_STATE_DESCEND:
 				_pos_sp_triplet_published_invalid_once = false;
 				_navigation_mode = &_land;
 				break;
@@ -490,9 +571,13 @@ Navigator::task_main()
 				/* Use complex data link loss mode only when enabled via param
 				* otherwise use rtl */
 				_pos_sp_triplet_published_invalid_once = false;
-				if (_param_datalinkloss_obc.get() != 0) {
+				if (_param_datalinkloss_act.get() == 1) {
+					_navigation_mode = &_loiter;
+				} else if (_param_datalinkloss_act.get() == 3) {
+					_navigation_mode = &_land;
+				} else if (_param_datalinkloss_act.get() == 4) {
 					_navigation_mode = &_dataLinkLoss;
-				} else {
+				} else { /* if == 2 or unknown, RTL */
 					_navigation_mode = &_rtl;
 				}
 				break;
@@ -503,6 +588,10 @@ Navigator::task_main()
 			case vehicle_status_s::NAVIGATION_STATE_AUTO_LANDGPSFAIL:
 				_pos_sp_triplet_published_invalid_once = false;
 				_navigation_mode = &_gpsFailure;
+				break;
+			case vehicle_status_s::NAVIGATION_STATE_AUTO_FOLLOW_TARGET:
+				_pos_sp_triplet_published_invalid_once = false;
+				_navigation_mode = &_follow_target;
 				break;
 			default:
 				_navigation_mode = nullptr;
@@ -551,7 +640,7 @@ Navigator::start()
 	_navigator_task = px4_task_spawn_cmd("navigator",
 					 SCHED_DEFAULT,
 					 SCHED_PRIORITY_DEFAULT + 5,
-					 1500,
+					 1300,
 					 (px4_main_t)&Navigator::task_main_trampoline,
 					 nullptr);
 
@@ -596,6 +685,11 @@ Navigator::publish_position_setpoint_triplet()
 	/* update navigation state */
 	_pos_sp_triplet.nav_state = _vstatus.nav_state;
 
+	/* do not publish an empty triplet */
+	if (!_pos_sp_triplet.current.valid) {
+		return;
+	}
+
 	/* lazily publish the position setpoint triplet only once available */
 	if (_pos_sp_triplet_pub != nullptr) {
 		orb_publish(ORB_ID(position_setpoint_triplet), _pos_sp_triplet_pub, &_pos_sp_triplet);
@@ -606,9 +700,28 @@ Navigator::publish_position_setpoint_triplet()
 }
 
 float
+Navigator::get_default_acceptance_radius()
+{
+	return _param_acceptance_radius.get();
+}
+
+float
 Navigator::get_acceptance_radius()
 {
 	return get_acceptance_radius(_param_acceptance_radius.get());
+}
+
+float
+Navigator::get_cruising_speed()
+{
+	/* there are three options: The mission-requested cruise speed, or the current hover / plane speed */
+	if (_mission_cruising_speed > 0.0f) {
+		return _mission_cruising_speed;
+	} else if (_vstatus.is_rotary_wing) {
+		return _param_cruising_speed_hover.get();
+	} else {
+		return _param_cruising_speed_plane.get();
+	}
 }
 
 float
@@ -620,9 +733,9 @@ Navigator::get_acceptance_radius(float mission_item_radius)
 	// when in fixed wing mode
 	// this might need locking against a commanded transition
 	// so that a stale _vstatus doesn't trigger an accepted mission item.
-	if (!_vstatus.is_rotary_wing && !_vstatus.in_transition_mode && hrt_elapsed_time(&_nav_caps.timestamp) < 5000000) {
-		if (_nav_caps.turn_distance > radius) {
-			radius = _nav_caps.turn_distance;
+	if (!_vstatus.is_rotary_wing && !_vstatus.in_transition_mode) {
+		if ((hrt_elapsed_time(&_fw_pos_ctrl_status.timestamp) < 5000000) && (_fw_pos_ctrl_status.turn_distance > radius)) {
+			radius = _fw_pos_ctrl_status.turn_distance;
 		}
 	}
 
@@ -748,5 +861,15 @@ Navigator::publish_att_sp()
 	} else {
 		/* advertise and publish */
 		_att_sp_pub = orb_advertise(ORB_ID(vehicle_attitude_setpoint), &_att_sp);
+	}
+}
+
+void
+Navigator::set_mission_failure(const char* reason)
+{
+	if (!_mission_result.mission_failure) {
+		_mission_result.mission_failure = true;
+		set_mission_result_updated();
+		mavlink_log_critical(&_mavlink_log_pub, "%s", reason);
 	}
 }

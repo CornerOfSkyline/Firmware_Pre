@@ -223,6 +223,7 @@
 #error PWMIN_TIMER_CHANNEL must be either 1 and 2.
 #endif
 
+// XXX refactor this out of this driver
 #define TIMEOUT_POLL 300000 /* reset after no response over this time in microseconds [0.3s] */
 #define TIMEOUT_READ 200000 /* don't reset if the last read is back more than this time in microseconds [0.2s] */
 
@@ -320,12 +321,14 @@ void PWMIN::_timer_init(void)
 {
 	/* run with interrupts disabled in case the timer is already
 	 * setup. We don't want it firing while we are doing the setup */
-	irqstate_t flags = irqsave();
+	irqstate_t flags = px4_enter_critical_section();
 
 	/* configure input pin */
-	stm32_configgpio(GPIO_PWM_IN);
+	px4_arch_configgpio(GPIO_PWM_IN);
+
+	// XXX refactor this out of this driver
 	/* configure reset pin */
-	stm32_configgpio(GPIO_VDD_RANGEFINDER_EN);
+	px4_arch_configgpio(GPIO_VDD_RANGEFINDER_EN);
 
 	/* claim our interrupt vector */
 	irq_attach(PWMIN_TIMER_VECTOR, pwmin_tim_isr);
@@ -370,11 +373,12 @@ void PWMIN::_timer_init(void)
 	/* enable interrupts */
 	up_enable_irq(PWMIN_TIMER_VECTOR);
 
-	irqrestore(flags);
+	px4_leave_critical_section(flags);
 
 	_timer_started = true;
 }
 
+// XXX refactor this out of this driver
 void
 PWMIN::_freeze_test()
 {
@@ -384,18 +388,21 @@ PWMIN::_freeze_test()
 	}
 }
 
+// XXX refactor this out of this driver
 void
 PWMIN::_turn_on()
 {
-	stm32_gpiowrite(GPIO_VDD_RANGEFINDER_EN, 1);
+	px4_arch_gpiowrite(GPIO_VDD_RANGEFINDER_EN, 1);
 }
 
+// XXX refactor this out of this driver
 void
 PWMIN::_turn_off()
 {
-	stm32_gpiowrite(GPIO_VDD_RANGEFINDER_EN, 0);
+	px4_arch_gpiowrite(GPIO_VDD_RANGEFINDER_EN, 0);
 }
 
+// XXX refactor this out of this driver
 void
 PWMIN::hard_reset()
 {
@@ -437,14 +444,14 @@ PWMIN::ioctl(struct file *filp, int cmd, unsigned long arg)
 				return -EINVAL;
 			}
 
-			irqstate_t flags = irqsave();
+			irqstate_t flags = px4_enter_critical_section();
 
 			if (!_reports->resize(arg)) {
-				irqrestore(flags);
+				px4_leave_critical_section(flags);
 				return -ENOMEM;
 			}
 
-			irqrestore(flags);
+			px4_leave_critical_section(flags);
 
 			return OK;
 		}

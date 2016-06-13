@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2012-2015 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2012-2016 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -122,16 +122,21 @@ MavlinkMissionManager::init_offboard_mission()
 	mission_s mission_state;
 	if (!_dataman_init) {
 		_dataman_init = true;
-		if (dm_read(DM_KEY_MISSION_STATE, 0, &mission_state, sizeof(mission_s)) == sizeof(mission_s)) {
+		int ret = dm_read(DM_KEY_MISSION_STATE, 0, &mission_state, sizeof(mission_s)) == sizeof(mission_s);
+		if (ret > 0) {
 			_dataman_id = mission_state.dataman_id;
 			_count = mission_state.count;
 			_current_seq = mission_state.current_seq;
 
-		} else {
+		} else if (ret == 0) {
 			_dataman_id = 0;
 			_count = 0;
 			_current_seq = 0;
-			warnx("offboard mission init: ERROR");
+		} else {
+			PX4_WARN("offboard mission init failed");
+			_dataman_id = 0;
+			_count = 0;
+			_current_seq = 0;
 		}
 	}
 	_my_dataman_id = _dataman_id;
@@ -188,7 +193,7 @@ MavlinkMissionManager::send_mission_ack(uint8_t sysid, uint8_t compid, uint8_t t
 	wpa.target_component = compid;
 	wpa.type = type;
 
-	_mavlink->send_message(MAVLINK_MSG_ID_MISSION_ACK, &wpa);
+	mavlink_msg_mission_ack_send_struct(_mavlink->get_channel(), &wpa);
 
 	if (_verbose) { warnx("WPM: Send MISSION_ACK type %u to ID %u", wpa.type, wpa.target_system); }
 }
@@ -202,7 +207,7 @@ MavlinkMissionManager::send_mission_current(uint16_t seq)
 
 		wpc.seq = seq;
 
-		_mavlink->send_message(MAVLINK_MSG_ID_MISSION_CURRENT, &wpc);
+		mavlink_msg_mission_current_send_struct(_mavlink->get_channel(), &wpc);
 
 	} else if (seq == 0 && _count == 0) {
 		/* don't broadcast if no WPs */
@@ -226,7 +231,7 @@ MavlinkMissionManager::send_mission_count(uint8_t sysid, uint8_t compid, uint16_
 	wpc.target_component = compid;
 	wpc.count = _count;
 
-	_mavlink->send_message(MAVLINK_MSG_ID_MISSION_COUNT, &wpc);
+	mavlink_msg_mission_count_send_struct(_mavlink->get_channel(), &wpc);
 
 	if (_verbose) { warnx("WPM: Send MISSION_COUNT %u to ID %u", wpc.count, wpc.target_system); }
 }
@@ -250,7 +255,7 @@ MavlinkMissionManager::send_mission_item(uint8_t sysid, uint8_t compid, uint16_t
 		wp.seq = seq;
 		wp.current = (_current_seq == seq) ? 1 : 0;
 
-		_mavlink->send_message(MAVLINK_MSG_ID_MISSION_ITEM, &wp);
+		mavlink_msg_mission_item_send_struct(_mavlink->get_channel(), &wp);
 
 		if (_verbose) { warnx("WPM: Send MISSION_ITEM seq %u to ID %u", wp.seq, wp.target_system); }
 
@@ -276,7 +281,7 @@ MavlinkMissionManager::send_mission_request(uint8_t sysid, uint8_t compid, uint1
 		wpr.target_component = compid;
 		wpr.seq = seq;
 
-		_mavlink->send_message(MAVLINK_MSG_ID_MISSION_REQUEST, &wpr);
+		mavlink_msg_mission_request_send_struct(_mavlink->get_channel(), &wpr);
 
 		if (_verbose) { warnx("WPM: Send MISSION_REQUEST seq %u to ID %u", wpr.seq, wpr.target_system); }
 
@@ -295,7 +300,7 @@ MavlinkMissionManager::send_mission_item_reached(uint16_t seq)
 
 	wp_reached.seq = seq;
 
-	_mavlink->send_message(MAVLINK_MSG_ID_MISSION_ITEM_REACHED, &wp_reached);
+	mavlink_msg_mission_item_reached_send_struct(_mavlink->get_channel(), &wp_reached);
 
 	if (_verbose) { warnx("WPM: Send MISSION_ITEM_REACHED reached_seq %u", wp_reached.seq); }
 }
@@ -579,7 +584,7 @@ MavlinkMissionManager::handle_mission_count(const mavlink_message_t *msg)
 	if (CHECK_SYSID_COMPID_MISSION(wpc)) {
 		if (_state == MAVLINK_WPM_STATE_IDLE) {
 			_time_last_recv = hrt_absolute_time();
-			
+
 			if(_transfer_in_progress)
 			{
 				send_mission_ack(_transfer_partner_sysid, _transfer_partner_compid, MAV_MISSION_ERROR);
@@ -674,7 +679,7 @@ MavlinkMissionManager::handle_mission_item(const mavlink_message_t *msg)
 			return;
 		}
 
-		struct mission_item_s mission_item;
+		struct mission_item_s mission_item = {};
 		int ret = parse_mavlink_mission_item(&wp, &mission_item);
 
 		if (ret != OK) {
@@ -788,10 +793,12 @@ MavlinkMissionManager::parse_mavlink_mission_item(const mavlink_mission_item_t *
 		mission_item->params[5] = mavlink_mission_item->y;
 		mission_item->params[6] = mavlink_mission_item->z;
 		break;
-			
+
 	default:
 		return MAV_MISSION_UNSUPPORTED_FRAME;
 	}
+
+	mission_item->frame = mavlink_mission_item->frame;
 
 	switch (mavlink_mission_item->command) {
 	case MAV_CMD_NAV_TAKEOFF:
@@ -802,13 +809,6 @@ MavlinkMissionManager::parse_mavlink_mission_item(const mavlink_mission_item_t *
 		mission_item->do_jump_mission_index = mavlink_mission_item->param1;
 		mission_item->do_jump_current_count = 0;
 		mission_item->do_jump_repeat_count = mavlink_mission_item->param2;
-		break;
-
-	case MAV_CMD_DO_SET_SERVO:
-
-		mission_item->actuator_num = mavlink_mission_item->param1;
-		mission_item->actuator_value = mavlink_mission_item->param2;
-		mission_item->time_inside=0.0f;
 		break;
 
 	default:
@@ -843,21 +843,35 @@ MavlinkMissionManager::parse_mavlink_mission_item(const mavlink_mission_item_t *
 int
 MavlinkMissionManager::format_mavlink_mission_item(const struct mission_item_s *mission_item, mavlink_mission_item_t *mavlink_mission_item)
 {
-	if (mission_item->altitude_is_relative) {
-		mavlink_mission_item->frame = MAV_FRAME_GLOBAL_RELATIVE_ALT;
+	mavlink_mission_item->frame = mission_item->frame;
+	mavlink_mission_item->command = mission_item->nav_cmd;
+	mavlink_mission_item->autocontinue = mission_item->autocontinue;
 
+	/* default mappings for generic commands */
+	if (mission_item->frame == MAV_FRAME_MISSION) {
+		mavlink_mission_item->param1 = mission_item->params[0];
+		mavlink_mission_item->param2 = mission_item->params[1];
+		mavlink_mission_item->param3 = mission_item->params[2];
+		mavlink_mission_item->param4 = mission_item->params[3];
+		mavlink_mission_item->x = mission_item->params[4];
+		mavlink_mission_item->y = mission_item->params[5];
+		mavlink_mission_item->z = mission_item->params[6];
+
+	// default mappings for regular waypoints
 	} else {
-		mavlink_mission_item->frame = MAV_FRAME_GLOBAL;
+		mavlink_mission_item->x = (float)mission_item->lat;
+		mavlink_mission_item->y = (float)mission_item->lon;
+		mavlink_mission_item->z = mission_item->altitude;
+
+		mavlink_mission_item->param4 = mission_item->yaw * M_RAD_TO_DEG_F;
+		mavlink_mission_item->param3 = mission_item->loiter_radius * (float)mission_item->loiter_direction;
 	}
 
+	// specific item handling
 	switch (mission_item->nav_cmd) {
 	case NAV_CMD_TAKEOFF:
+	case NAV_CMD_VTOL_TAKEOFF:
 		mavlink_mission_item->param1 = mission_item->pitch_min;
-		break;
-
-	case NAV_CMD_DO_SET_SERVO:
-		mavlink_mission_item->param1 = mission_item->actuator_num;
-		mavlink_mission_item->param2 = mission_item->actuator_value;
 		break;
 
 	case NAV_CMD_DO_JUMP:
@@ -870,16 +884,6 @@ MavlinkMissionManager::format_mavlink_mission_item(const struct mission_item_s *
 		mavlink_mission_item->param1 = mission_item->time_inside;
 		break;
 	}
-
-	mavlink_mission_item->x = (float)mission_item->lat;
-	mavlink_mission_item->y = (float)mission_item->lon;
-	mavlink_mission_item->z = mission_item->altitude;
-
-	mavlink_mission_item->param4 = mission_item->yaw * M_RAD_TO_DEG_F;
-	mavlink_mission_item->param3 = mission_item->loiter_radius * (float)mission_item->loiter_direction;
-	mavlink_mission_item->command = mission_item->nav_cmd;
-	mavlink_mission_item->autocontinue = mission_item->autocontinue;
-	// mavlink_mission_item->seq = mission_item->index;
 
 	return OK;
 }

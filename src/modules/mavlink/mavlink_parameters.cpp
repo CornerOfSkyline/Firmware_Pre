@@ -47,8 +47,6 @@
 #include "mavlink_parameters.h"
 #include "mavlink_main.h"
 
-ORB_DEFINE(uavcan_parameter_request, struct uavcan_parameter_request_s);
-ORB_DEFINE(uavcan_parameter_value, struct uavcan_parameter_value_s);
 #define HASH_PARAM "_HASH_CHECK"
 
 MavlinkParametersManager::MavlinkParametersManager(Mavlink *mavlink) : MavlinkStream(mavlink),
@@ -58,6 +56,15 @@ MavlinkParametersManager::MavlinkParametersManager(Mavlink *mavlink) : MavlinkSt
 	_uavcan_parameter_request_pub(nullptr),
 	_uavcan_parameter_value_sub(-1)
 {
+}
+MavlinkParametersManager::~MavlinkParametersManager()
+{
+	if (_uavcan_parameter_value_sub >= 0) {
+		orb_unsubscribe(_uavcan_parameter_value_sub);
+	}
+	if (_uavcan_parameter_request_pub) {
+		orb_unadvertise(_uavcan_parameter_request_pub);
+	}
 }
 
 unsigned
@@ -77,8 +84,12 @@ MavlinkParametersManager::handle_message(const mavlink_message_t *msg)
 
 			if (req_list.target_system == mavlink_system.sysid &&
 			    (req_list.target_component == mavlink_system.compid || req_list.target_component == MAV_COMP_ID_ALL)) {
-
-				_send_all_index = 0;
+				if (_send_all_index < 0) {
+					_send_all_index = PARAM_HASH;
+				} else {
+					/* a restart should skip the hash check on the ground */
+					_send_all_index = 0;
+				}
 			}
 
 			if (req_list.target_system == mavlink_system.sysid && req_list.target_component < 127 &&
@@ -111,6 +122,14 @@ MavlinkParametersManager::handle_message(const mavlink_message_t *msg)
 				strncpy(name, set.param_id, MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN);
 				/* enforce null termination */
 				name[MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN] = '\0';
+
+				/* Whatever the value is, we're being told to stop sending */
+				if (strncmp(name, "_HASH_CHECK", sizeof(name)) == 0) {
+					_send_all_index = -1;
+					/* No other action taken, return */
+					return;
+				}
+
 				/* attempt to find parameter, set and send it */
 				param_t param = param_find_no_notification(name);
 
@@ -164,18 +183,19 @@ MavlinkParametersManager::handle_message(const mavlink_message_t *msg)
 
 				/* when no index is given, loop through string ids and compare them */
 				if (req_read.param_index < 0) {
+					/* XXX: I left this in so older versions of QGC wouldn't break */
 					if (strncmp(req_read.param_id, HASH_PARAM, MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN) == 0) {
 						/* return hash check for cached params */
 						uint32_t hash = param_hash_check();
 
 						/* build the one-off response message */
-						mavlink_param_value_t msg;
-						msg.param_count = param_count_used();
-						msg.param_index = -1;
-						strncpy(msg.param_id, HASH_PARAM, MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN);
-						msg.param_type = MAV_PARAM_TYPE_UINT32;
-						memcpy(&msg.param_value, &hash, sizeof(hash));
-						_mavlink->send_message(MAVLINK_MSG_ID_PARAM_VALUE, &msg);
+						mavlink_param_value_t param_value;
+						param_value.param_count = param_count_used();
+						param_value.param_index = -1;
+						strncpy(param_value.param_id, HASH_PARAM, MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN);
+						param_value.param_type = MAV_PARAM_TYPE_UINT32;
+						memcpy(&param_value.param_value, &hash, sizeof(hash));
+						mavlink_msg_param_value_send_struct(_mavlink->get_channel(), &param_value);
 					} else {
 						/* local name buffer to enforce null-terminated string */
 						char name[MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN + 1];
@@ -185,7 +205,6 @@ MavlinkParametersManager::handle_message(const mavlink_message_t *msg)
 						/* attempt to find parameter and send it */
 						send_param(param_find_no_notification(name));
 					}
-
 				} else {
 					/* when index is >= 0, send this parameter again */
 					int ret = send_param(param_for_used_index(req_read.param_index));
@@ -292,12 +311,35 @@ MavlinkParametersManager::send(const hrt_abstime t)
 			memcpy(&msg.param_value, &val, sizeof(int32_t));
 			msg.param_type = MAVLINK_TYPE_INT32_T;
 		}
-		_mavlink->send_message(MAVLINK_MSG_ID_PARAM_VALUE, &msg, value.node_id);
+		mavlink_msg_param_value_send_struct(_mavlink->get_channel(), &msg);
 	} else if (_send_all_index >= 0 && _mavlink->boot_complete()) {
 		/* send all parameters if requested, but only after the system has booted */
 
 		/* skip if no space is available */
 		if (!space_available) {
+			return;
+		}
+
+		/* The first thing we send is a hash of all values for the ground
+		 * station to try and quickly load a cached copy of our params
+		 */
+		if (_send_all_index == PARAM_HASH) {
+			/* return hash check for cached params */
+			uint32_t hash = param_hash_check();
+
+			/* build the one-off response message */
+			mavlink_param_value_t msg;
+			msg.param_count = param_count_used();
+			msg.param_index = -1;
+			strncpy(msg.param_id, HASH_PARAM, MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN);
+			msg.param_type = MAV_PARAM_TYPE_UINT32;
+			memcpy(&msg.param_value, &hash, sizeof(hash));
+			mavlink_msg_param_value_send_struct(_mavlink->get_channel(), &msg);
+
+			/* after this we should start sending all params */
+			_send_all_index = 0;
+
+			/* No further action, return now */
 			return;
 		}
 
@@ -316,7 +358,7 @@ MavlinkParametersManager::send(const hrt_abstime t)
 		if ((p == PARAM_INVALID) || (_send_all_index >= (int) param_count())) {
 			_send_all_index = -1;
 		}
-	} else if (_send_all_index == 0 && hrt_absolute_time() > 20 * 1000 * 1000) {
+	} else if (_send_all_index == PARAM_HASH && hrt_absolute_time() > 20 * 1000 * 1000) {
 		/* the boot did not seem to ever complete, warn user and set boot complete */
 		_mavlink->send_statustext_critical("WARNING: SYSTEM BOOT INCOMPLETE. CHECK CONFIG.");
 		_mavlink->set_boot_complete();
@@ -363,7 +405,7 @@ MavlinkParametersManager::send_param(param_t param)
 		msg.param_type = MAVLINK_TYPE_FLOAT;
 	}
 
-	_mavlink->send_message(MAVLINK_MSG_ID_PARAM_VALUE, &msg);
+	mavlink_msg_param_value_send_struct(_mavlink->get_channel(), &msg);
 
 	return 0;
 }
