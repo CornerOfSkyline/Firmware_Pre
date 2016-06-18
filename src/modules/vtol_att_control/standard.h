@@ -76,6 +76,9 @@ private:
 		float front_trans_time_min;
 		float down_pitch_max;
 		float forward_thurst_scale;
+		float airspeed_blend_for_fw;
+		float airspeed_back_trans_end;
+		float back_trans_time_max;
 	} _params_standard;
 
 	struct {
@@ -88,6 +91,9 @@ private:
 		param_t front_trans_time_min;
 		param_t down_pitch_max;
 		param_t forward_thurst_scale;
+		param_t airspeed_blend_for_fw;
+		param_t airspeed_back_trans_end;
+		param_t back_trans_time_max;
 	} _params_handles_standard;
 
 	enum vtol_mode {
@@ -105,6 +111,7 @@ private:
 	bool _flag_enable_mc_motors;
 	float _pusher_throttle;
 	float _airspeed_trans_blend_margin;
+	orb_advert_t _mavlink_log_pub;	// mavlink log uORB handle
 
 	void set_max_mc(unsigned pwm_value);
 

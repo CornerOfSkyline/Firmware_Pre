@@ -169,6 +169,10 @@ protected:
 	// motors spinning up or cutting too fast whend doing transitions.
 	float _thrust_transition = 0.0f;	// thrust value applied during a front transition (tailsitter & tiltrotor only)
 
+	float _fw_roll_weight = 1.0f;	// weight for fixwing attitude controller roll output
+	float _fw_pitch_weight = 1.0f;	// weight for fixwing attitude controller pitch output
+	float _fw_yaw_weight = 1.0f;	// weight for fixwing attitude controller yaw output
+
 	bool _flag_was_in_trans_mode = false;	// true if mode has just switched to transition
 	hrt_abstime _trans_finished_ts = 0;
 	bool _tecs_running = false;

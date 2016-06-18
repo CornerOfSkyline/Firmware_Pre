@@ -304,3 +304,43 @@ PARAM_DEFINE_FLOAT(VT_TRANS_MIN_TM, 2.0f);
  * @group VTOL Attitude Control
  */
 PARAM_DEFINE_INT32(VT_NAV_FORCE_VT, 1);
+
+/**
+ * Front transition blending airspeed for fixwing
+ *
+ * Airspeed at which we can start blending fw controls. Set to 0 to disable.
+ *
+ * @unit m/s
+ * @min 0.00
+ * @max 30.00
+ * @increment 1
+ * @decimal 2
+ * @group VTOL Attitude Control
+ */
+PARAM_DEFINE_FLOAT(VT_ARSP_FW_BLEND, 8.0f);
+
+/**
+ * Back transition finish airspeed
+ *
+ * Airspeed at which we can end the back transition. Set to 0 to disable.
+ *
+ * @unit m/s
+ * @min 0.00
+ * @max 10.00
+ * @increment 1
+ * @decimal 2
+ * @group VTOL Attitude Control
+ */
+PARAM_DEFINE_FLOAT(VT_EARSP_B_TRANS, 5.0f);
+
+/**
+ * Back transition maximum time
+ *
+ * Maximum time in seconds for back transition.
+ *
+ * @unit s
+ * @min 0.0
+ * @max 100.0
+ * @group VTOL Attitude Control
+ */
+PARAM_DEFINE_FLOAT(VT_BTRANS_MAX_TM, 100.0f);

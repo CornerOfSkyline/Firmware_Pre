@@ -43,12 +43,14 @@
 
 #include "standard.h"
 #include "vtol_att_control_main.h"
+#include <systemlib/mavlink_log.h>
 
 Standard::Standard(VtolAttitudeControl *attc) :
 	VtolType(attc),
 	_flag_enable_mc_motors(true),
 	_pusher_throttle(0.0f),
-	_airspeed_trans_blend_margin(0.0f)
+	_airspeed_trans_blend_margin(0.0f),
+	_mavlink_log_pub(nullptr)
 {
 	_vtol_schedule.flight_mode = MC_MODE;
 	_vtol_schedule.transition_start = 0;
@@ -68,6 +70,9 @@ Standard::Standard(VtolAttitudeControl *attc) :
 	_params_handles_standard.front_trans_time_min = param_find("VT_TRANS_MIN_TM");
 	_params_handles_standard.down_pitch_max = param_find("VT_DWN_PITCH_MAX");
 	_params_handles_standard.forward_thurst_scale = param_find("VT_FWD_THRUST_SC");
+	_params_handles_standard.airspeed_blend_for_fw = param_find("VT_ARSP_FW_BLEND");
+	_params_handles_standard.airspeed_back_trans_end = param_find("VT_EARSP_B_TRANS");
+	_params_handles_standard.back_trans_time_max = param_find("VT_BTRANS_MAX_TM");
 }
 
 Standard::~Standard()
@@ -114,6 +119,18 @@ Standard::parameters_update()
 	/* scale for fixed wing thrust used for forward acceleration in multirotor mode */
 	param_get(_params_handles_standard.forward_thurst_scale, &_params_standard.forward_thurst_scale);
 
+	/* airspeed at which we can start blending fw controls */
+	param_get(_params_handles_standard.airspeed_blend_for_fw, &v);
+	_params_standard.airspeed_blend_for_fw = math::constrain(v, 0.0f, 30.0f);
+
+	/* airspeed at which we can end the back transition */
+	param_get(_params_handles_standard.airspeed_back_trans_end, &v);
+	_params_standard.airspeed_back_trans_end = math::constrain(v, 0.0f, 10.0f);
+
+	/* maximum time in seconds for back transition */
+	param_get(_params_handles_standard.back_trans_time_max, &v);
+	_params_standard.back_trans_time_max = math::constrain(v, 0.0f, 100.0f);
+
 
 	return OK;
 }
@@ -143,6 +160,8 @@ void Standard::update_vtol_state()
 			_flag_enable_mc_motors = true;
 			_vtol_schedule.transition_start = hrt_absolute_time();
 
+			mavlink_log_info(&_mavlink_log_pub, "Transition to MC!");
+
 		} else if (_vtol_schedule.flight_mode == TRANSITION_TO_FW) {
 			// failsafe back to mc mode
 			_vtol_schedule.flight_mode = MC_MODE;
@@ -151,12 +170,23 @@ void Standard::update_vtol_state()
 			_mc_yaw_weight = 1.0f;
 			_mc_throttle_weight = 1.0f;
 
+			mavlink_log_info(&_mavlink_log_pub, "MC mode!");
+
 		} else if (_vtol_schedule.flight_mode == TRANSITION_TO_MC) {
 			// transition to MC mode if transition time has passed
 			// XXX: base this on XY hold velocity of MC
+			/* cancle the back transition finish only through the time elapsed
 			if (hrt_elapsed_time(&_vtol_schedule.transition_start) >
 			    (_params_standard.back_trans_dur * 1000000.0f)) {
 				_vtol_schedule.flight_mode = MC_MODE;
+			}
+			*/
+
+			if (_airspeed->indicated_airspeed_m_s <= _params_standard.airspeed_back_trans_end || 
+				(hrt_elapsed_time(&_vtol_schedule.transition_start) > (_params_standard.back_trans_time_max * 1000000.0f))) {
+				_vtol_schedule.flight_mode = MC_MODE;
+
+				mavlink_log_info(&_mavlink_log_pub, "MC mode!");
 			}
 		}
 
@@ -169,6 +199,8 @@ void Standard::update_vtol_state()
 			// start transition to fw mode
 			_vtol_schedule.flight_mode = TRANSITION_TO_FW;
 			_vtol_schedule.transition_start = hrt_absolute_time();
+
+			mavlink_log_info(&_mavlink_log_pub, "Transition to FW!");
 
 		} else if (_vtol_schedule.flight_mode == FW_MODE) {
 			// in fw mode
@@ -189,11 +221,15 @@ void Standard::update_vtol_state()
 				_flag_enable_mc_motors = false;
 				// don't set pusher throttle here as it's being ramped up elsewhere
 				_trans_finished_ts = hrt_absolute_time();
+
+				mavlink_log_info(&_mavlink_log_pub, "FW mode!");
 			}
 
 		} else if (_vtol_schedule.flight_mode == TRANSITION_TO_MC) {
 			// transitioning to mc mode & transition switch on - failsafe back into fw mode
 			_vtol_schedule.flight_mode = FW_MODE;
+
+			mavlink_log_info(&_mavlink_log_pub, "FW mode!");
 		}
 	}
 
@@ -237,10 +273,18 @@ void Standard::update_transition_state()
 		   ) {
 			float weight = 1.0f - fabsf(_airspeed->indicated_airspeed_m_s - _params_standard.airspeed_blend) /
 				       _airspeed_trans_blend_margin;
+
+			float weight_fw = fabsf(_airspeed->indicated_airspeed_m_s - _params_standard.airspeed_blend_for_fw) /
+				       (_params_standard.airspeed_trans - _params_standard.airspeed_blend_for_fw);
+
 			_mc_roll_weight = weight;
 			_mc_pitch_weight = weight;
 			_mc_yaw_weight = weight;
 			_mc_throttle_weight = weight;
+
+			_fw_roll_weight = weight_fw;
+			_fw_pitch_weight = weight_fw;
+			_fw_yaw_weight = weight_fw;
 
 		} else {
 			// at low speeds give full weight to mc
@@ -287,6 +331,10 @@ void Standard::update_transition_state()
 	_mc_pitch_weight = math::constrain(_mc_pitch_weight, 0.0f, 1.0f);
 	_mc_yaw_weight = math::constrain(_mc_yaw_weight, 0.0f, 1.0f);
 	_mc_throttle_weight = math::constrain(_mc_throttle_weight, 0.0f, 1.0f);
+
+	_fw_roll_weight = math::constrain(_fw_roll_weight, 0.0f, 1.0f);
+	_fw_pitch_weight = math::constrain(_fw_pitch_weight, 0.0f, 1.0f);
+	_fw_yaw_weight = math::constrain(_fw_yaw_weight, 0.0f, 1.0f);
 }
 
 void Standard::update_mc_state()
@@ -384,13 +432,26 @@ void Standard::fill_actuator_outputs()
 		_actuators_mc_in->control[actuator_controls_s::INDEX_THROTTLE] * _mc_throttle_weight;	// throttle
 
 	/* fixed wing controls */
-	_actuators_out_1->timestamp = _actuators_fw_in->timestamp;
-	_actuators_out_1->control[actuator_controls_s::INDEX_ROLL] = -_actuators_fw_in->control[actuator_controls_s::INDEX_ROLL]
-			* (1 - _mc_roll_weight);	//roll
-	_actuators_out_1->control[actuator_controls_s::INDEX_PITCH] =
-		(_actuators_fw_in->control[actuator_controls_s::INDEX_PITCH] + _params->fw_pitch_trim) * (1 - _mc_pitch_weight);	//pitch
-	_actuators_out_1->control[actuator_controls_s::INDEX_YAW] = _actuators_fw_in->control[actuator_controls_s::INDEX_YAW]
-			* (1 - _mc_yaw_weight);	// yaw
+	if(_vtol_schedule.flight_mode == TRANSITION_TO_FW)
+	{
+		_actuators_out_1->timestamp = _actuators_fw_in->timestamp;
+		_actuators_out_1->control[actuator_controls_s::INDEX_ROLL] = -_actuators_fw_in->control[actuator_controls_s::INDEX_ROLL]
+				* _fw_roll_weight;	//roll
+		_actuators_out_1->control[actuator_controls_s::INDEX_PITCH] =
+			(_actuators_fw_in->control[actuator_controls_s::INDEX_PITCH] + _params->fw_pitch_trim) * _fw_pitch_weight;	//pitch
+		_actuators_out_1->control[actuator_controls_s::INDEX_YAW] = _actuators_fw_in->control[actuator_controls_s::INDEX_YAW]
+				* _fw_yaw_weight;	// yaw
+	}
+	else
+	{
+		_actuators_out_1->timestamp = _actuators_fw_in->timestamp;
+		_actuators_out_1->control[actuator_controls_s::INDEX_ROLL] = -_actuators_fw_in->control[actuator_controls_s::INDEX_ROLL]
+				* (1 - _mc_roll_weight);	//roll
+		_actuators_out_1->control[actuator_controls_s::INDEX_PITCH] =
+			(_actuators_fw_in->control[actuator_controls_s::INDEX_PITCH] + _params->fw_pitch_trim) * (1 - _mc_pitch_weight);	//pitch
+		_actuators_out_1->control[actuator_controls_s::INDEX_YAW] = _actuators_fw_in->control[actuator_controls_s::INDEX_YAW]
+				* (1 - _mc_yaw_weight);	// yaw
+	}
 
 	_actuators_out_1->control[actuator_controls_s::INDEX_THROTTLE] = _pusher_throttle;
 
