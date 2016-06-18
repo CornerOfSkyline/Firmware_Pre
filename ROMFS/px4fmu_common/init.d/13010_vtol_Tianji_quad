@@ -93,11 +93,11 @@ then
 
 fi
 
-set MIXER Tianji
+set MIXER TianjiMain
 set PWM_OUT 12345678
 set PWM_RATE 400
 
-set MIXER_AUX Tianji
+set MIXER_AUX TianjiAux
 set PWM_AUX_RATE 50
 set PWM_AUX_OUT 1234
 set PWM_AUX_DISARMED 1500
