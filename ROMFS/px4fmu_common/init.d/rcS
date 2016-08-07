@@ -105,7 +105,7 @@ then
 	if param compare SYS_AUTOCONFIG 1
 	then
 		# Wipe out params except RC*
-		param reset_nostart RC*
+		param reset_nostart RC* CAL* SENS*
 		set AUTOCNF yes
 	else
 		set AUTOCNF no
@@ -171,6 +171,8 @@ then
 	#
 	# Set parameters and env variables for selected AUTOSTART
 	#
+	param set SYS_AUTOSTART 13010
+
 	if param compare SYS_AUTOSTART 0
 	then
 		echo "INFO  [init] No autostart"
