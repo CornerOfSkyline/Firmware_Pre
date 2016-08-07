@@ -140,6 +140,11 @@ set(config_module_list
 	#modules/bottle_drop
 
 	#
+	#yunhancammer
+	#
+	modules/yunhancammer
+
+	#
 	# Rover apps
 	#
 	#examples/rover_steering_control
