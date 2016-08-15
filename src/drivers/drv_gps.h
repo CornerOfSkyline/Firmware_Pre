@@ -48,13 +48,14 @@
 #include "drv_orb_dev.h"
 
 #ifndef GPS_DEFAULT_UART_PORT
-#define GPS_DEFAULT_UART_PORT "/dev/ttyS3"
+#define GPS_DEFAULT_UART_PORT "/dev/ttyS6"
 #endif
 
 typedef enum {
 	GPS_DRIVER_MODE_NONE = 0,
 	GPS_DRIVER_MODE_UBX,
 	GPS_DRIVER_MODE_MTK,
-	GPS_DRIVER_MODE_ASHTECH
+        GPS_DRIVER_MODE_ASHTECH,
+        GPS_DRIVER_MODE_UFLY
 } gps_driver_mode_t;
 

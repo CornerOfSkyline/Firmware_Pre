@@ -85,6 +85,7 @@
 #include "devices/src/ubx.h"
 #include "devices/src/mtk.h"
 #include "devices/src/ashtech.h"
+#include "devices/src/ufly.h"
 
 
 #define TIMEOUT_5HZ 500
@@ -734,6 +735,9 @@ GPS::task_main()
 				_helper = new GPSDriverAshtech(&GPS::callback, this, &_report_gps_pos, _p_report_sat_info);
 				break;
 
+            case GPS_DRIVER_MODE_UFLY:
+                _helper = new GPSDriverUFLY(&GPS::callback, this, &_report_gps_pos);
+
 			default:
 				break;
 			}
@@ -770,7 +774,30 @@ GPS::task_main()
 
 					/* GPS is obviously detected successfully, reset statistics */
 					_helper->resetUpdateRates();
-				}
+                }
+                else if(_mode == GPS_DRIVER_MODE_UFLY){
+                    /* Publish initial report that we have access to a GPS,
+                     * but set all critical state fields to indicate we have
+                     * no valid position lock
+                     */
+
+                    _report_gps_pos.timestamp_time = hrt_absolute_time();
+
+                    /* reset the timestamps for data, because we have no data yet */
+                    _report_gps_pos.timestamp_position = 0;
+                    _report_gps_pos.timestamp_variance = 0;
+                    _report_gps_pos.timestamp_velocity = 0;
+
+                    /* set a massive variance */
+                    _report_gps_pos.eph = 10000.0f;
+                    _report_gps_pos.epv = 10000.0f;
+                    _report_gps_pos.fix_type = 0;
+
+                    publish();
+
+                    /* GPS is obviously detected successfully, reset statistics */
+                    _helper->resetUpdateRates();
+                }
 
 				int helper_ret;
 
@@ -862,15 +889,22 @@ GPS::task_main()
 			switch (_mode) {
 			case GPS_DRIVER_MODE_UBX:
 				_mode = GPS_DRIVER_MODE_MTK;
+                PX4_WARN("GPS_DRIVER_MODE_MTK");
 				break;
 
 			case GPS_DRIVER_MODE_MTK:
 				_mode = GPS_DRIVER_MODE_ASHTECH;
+                PX4_WARN("GPS_DRIVER_MODE_ASHTECH");
 				break;
 
 			case GPS_DRIVER_MODE_ASHTECH:
-				_mode = GPS_DRIVER_MODE_UBX;
+                _mode = GPS_DRIVER_MODE_UFLY;
+                PX4_WARN("GPS_DRIVER_MODE_UFLY");
 				break;
+
+            case GPS_DRIVER_MODE_UFLY:
+                _mode = GPS_DRIVER_MODE_UBX;
+                PX4_WARN("GPS_DRIVER_MODE_UBX");
 
 			default:
 				break;
