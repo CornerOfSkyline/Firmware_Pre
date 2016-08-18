@@ -79,6 +79,7 @@ private:
 		float airspeed_blend_for_fw;
 		float airspeed_back_trans_end;
 		float back_trans_time_max;
+		int airspeed_mode;
 	} _params_standard;
 
 	struct {
@@ -94,6 +95,7 @@ private:
 		param_t airspeed_blend_for_fw;
 		param_t airspeed_back_trans_end;
 		param_t back_trans_time_max;
+		param_t airspeed_mode;
 	} _params_handles_standard;
 
 	enum vtol_mode {
