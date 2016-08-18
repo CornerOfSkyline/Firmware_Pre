@@ -181,7 +181,7 @@ then
 	#
 	# Set parameters and env variables for selected AUTOSTART
 	#
-	param set SYS_AUTOSTART 13010
+	param set SYS_AUTOSTART 13055
 
 	if param compare SYS_AUTOSTART 0
 	then
