@@ -75,7 +75,7 @@ private:
 		float front_trans_timeout;
 		float front_trans_time_min;
 		float down_pitch_max;
-		float forward_thurst_scale;
+		float forward_thrust_scale;
 		float airspeed_blend_for_fw;
 		float airspeed_back_trans_end;
 		float back_trans_time_max;
@@ -91,7 +91,7 @@ private:
 		param_t front_trans_timeout;
 		param_t front_trans_time_min;
 		param_t down_pitch_max;
-		param_t forward_thurst_scale;
+		param_t forward_thrust_scale;
 		param_t airspeed_blend_for_fw;
 		param_t airspeed_back_trans_end;
 		param_t back_trans_time_max;

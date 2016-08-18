@@ -69,7 +69,7 @@ Standard::Standard(VtolAttitudeControl *attc) :
 	_params_handles_standard.front_trans_timeout = param_find("VT_TRANS_TIMEOUT");
 	_params_handles_standard.front_trans_time_min = param_find("VT_TRANS_MIN_TM");
 	_params_handles_standard.down_pitch_max = param_find("VT_DWN_PITCH_MAX");
-	_params_handles_standard.forward_thurst_scale = param_find("VT_FWD_THRUST_SC");
+	_params_handles_standard.forward_thrust_scale = param_find("VT_FWD_THRUST_SC");
 	_params_handles_standard.airspeed_blend_for_fw = param_find("VT_ARSP_FW_BLEND");
 	_params_handles_standard.airspeed_back_trans_end = param_find("VT_EARSP_B_TRANS");
 	_params_handles_standard.back_trans_time_max = param_find("VT_BTRANS_MAX_TM");
