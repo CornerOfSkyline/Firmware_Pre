@@ -100,7 +100,7 @@ Standard::parameters_update()
 
 	/* airspeed at which we should switch to fw mode */
 	param_get(_params_handles_standard.airspeed_trans, &v);
-	_params_standard.airspeed_trans = math::constrain(v, 1.0f, 20.0f);
+	_params_standard.airspeed_trans = math::constrain(v, 18.0f, 20.0f);
 
 	/* airspeed at which we start blending mc/fw controls */
 	param_get(_params_handles_standard.airspeed_blend, &v);

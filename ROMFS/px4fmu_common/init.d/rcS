@@ -181,7 +181,13 @@ then
 	#
 	# Set parameters and env variables for selected AUTOSTART
 	#
+	if param compare SYS_AUTOSTART 13055
+	then
+	else
 	param set SYS_AUTOSTART 13055
+	param reset_nostart RC* CAL* SENS*
+	set AUTOCNF yes 
+	fi
 
 	if param compare SYS_AUTOSTART 0
 	then
