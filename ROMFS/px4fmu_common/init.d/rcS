@@ -189,6 +189,27 @@ then
 	set AUTOCNF yes 
 	fi
 
+	if param compare VT_EARSP_B_TRANS 5
+	then
+	else
+	param reset_nostart RC* CAL* SENS*
+	set AUTOCNF yes 
+	fi
+
+	if param compare VT_ARSP_BLEND 14.0
+	then
+	else
+	param reset_nostart RC* CAL* SENS*
+	set AUTOCNF yes 
+	fi
+
+	if param compare VT_ARSP_TRANS 18.0
+	then
+	else
+	param reset_nostart RC* CAL* SENS*
+	set AUTOCNF yes 
+	fi
+
 	if param compare SYS_AUTOSTART 0
 	then
 		echo "INFO  [init] No autostart"
