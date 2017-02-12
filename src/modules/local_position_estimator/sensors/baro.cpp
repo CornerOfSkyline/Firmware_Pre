@@ -21,18 +21,17 @@ void BlockLocalPositionEstimator::baroInit()
 
 	// if finished
 	if (_baroStats.getCount() > REQ_BARO_INIT_COUNT) {
-		_baroAltHome = _baroStats.getMean()(0);
+		_baroAltOrigin = _baroStats.getMean()(0);
 		mavlink_and_console_log_info(&mavlink_log_pub,
 					     "[lpe] baro init %d m std %d cm",
 					     (int)_baroStats.getMean()(0),
 					     (int)(100 * _baroStats.getStdDev()(0)));
-		_baroInitialized = true;
-		_baroFault = FAULT_NONE;
+		_sensorTimeout &= ~SENSOR_BARO;
+		_sensorFault &= ~SENSOR_BARO;
 
-		// only initialize alt home with baro if gps is disabled
-		if (!_altHomeInitialized && !_gps_on.get()) {
-			_altHomeInitialized = true;
-			_altHome = _baroAltHome;
+		if (!_altOriginInitialized) {
+			_altOriginInitialized = true;
+			_altOrigin = _baroAltOrigin;
 		}
 	}
 }
@@ -41,7 +40,7 @@ int BlockLocalPositionEstimator::baroMeasure(Vector<float, n_y_baro> &y)
 {
 	//measure
 	y.setZero();
-	y(0) = _sub_sensor.get().baro_alt_meter[0];
+	y(0) = _sub_sensor.get().baro_alt_meter;
 	_baroStats.update(y);
 	_time_last_baro = _timeStamp;
 	return OK;
@@ -54,8 +53,8 @@ void BlockLocalPositionEstimator::baroCorrect()
 
 	if (baroMeasure(y) != OK) { return; }
 
-	// subtract baro home alt
-	y -= _baroAltHome;
+	// subtract baro origin alt
+	y -= _baroAltOrigin;
 
 	// baro measurement matrix
 	Matrix<float, n_y_baro, n_x> C;
@@ -75,39 +74,29 @@ void BlockLocalPositionEstimator::baroCorrect()
 	float beta = (r.transpose() * (S_I * r))(0, 0);
 
 	if (beta > BETA_TABLE[n_y_baro]) {
-		if (_baroFault < FAULT_MINOR) {
-			//mavlink_and_console_log_info(&mavlink_log_pub, "[lpe] baro fault, r %5.2f m, beta %5.2f",
-			//double(r(0)), double(beta));
-			_baroFault = FAULT_MINOR;
+		if (!(_sensorFault & SENSOR_BARO)) {
+			mavlink_log_critical(&mavlink_log_pub, "[lpe] baro fault, r %5.2f m, beta %5.2f",
+					     double(r(0)), double(beta));
+			_sensorFault |= SENSOR_BARO;
 		}
 
-	} else if (_baroFault) {
-		_baroFault = FAULT_NONE;
-		//mavlink_and_console_log_info(&mavlink_log_pub, "[lpe] baro OK");
+	} else if (_sensorFault & SENSOR_BARO) {
+		_sensorFault &= ~SENSOR_BARO;
+		mavlink_and_console_log_info(&mavlink_log_pub, "[lpe] baro OK");
 	}
 
-	// kalman filter correction if no fault
-	if (_baroFault < fault_lvl_disable) {
-		Matrix<float, n_x, n_y_baro> K = _P * C.transpose() * S_I;
-		Vector<float, n_x> dx = K * r;
-
-		if (!_canEstimateXY) {
-			dx(X_x) = 0;
-			dx(X_y) = 0;
-			dx(X_vx) = 0;
-			dx(X_vy) = 0;
-		}
-
-		_x += dx;
-		_P -= K * C * _P;
-	}
+	// kalman filter correction always
+	Matrix<float, n_x, n_y_baro> K = _P * C.transpose() * S_I;
+	Vector<float, n_x> dx = K * r;
+	_x += dx;
+	_P -= K * C * _P;
 }
 
 void BlockLocalPositionEstimator::baroCheckTimeout()
 {
 	if (_timeStamp - _time_last_baro > BARO_TIMEOUT) {
-		if (_baroInitialized) {
-			_baroInitialized = false;
+		if (!(_sensorTimeout & SENSOR_BARO)) {
+			_sensorTimeout |= SENSOR_BARO;
 			_baroStats.reset();
 			mavlink_and_console_log_info(&mavlink_log_pub, "[lpe] baro timeout ");
 		}

@@ -1,6 +1,8 @@
 include(nuttx/px4_impl_nuttx)
 
-set(CMAKE_TOOLCHAIN_FILE ${CMAKE_SOURCE_DIR}/cmake/toolchains/Toolchain-arm-none-eabi.cmake)
+px4_nuttx_configure(HWCLASS m4 CONFIG nsh ROMFS y ROMFSROOT px4fmu_common)
+
+set(CMAKE_TOOLCHAIN_FILE ${PX4_SOURCE_DIR}/cmake/toolchains/Toolchain-arm-none-eabi.cmake)
 
 set(config_module_list
 	#
@@ -23,7 +25,7 @@ set(config_module_list
 	drivers/ms5611
 	drivers/mb12xx
 	drivers/sf0x
-	drivers/ll40ls
+	#drivers/ll40ls
 	drivers/trone
 	drivers/gps
 	drivers/pwm_out_sim
@@ -36,6 +38,7 @@ set(config_module_list
 	drivers/meas_airspeed
 	drivers/frsky_telemetry
 	modules/sensors
+	drivers/vmount
 	drivers/camera_trigger
 	drivers/mkblctrl
 	drivers/px4flow
@@ -61,6 +64,7 @@ set(config_module_list
 	# General system control
 	#
 	modules/commander
+	modules/events
 	modules/load_mon
 	modules/navigator
 	modules/mavlink
@@ -68,13 +72,11 @@ set(config_module_list
 	modules/land_detector
 
 	#
-	# Estimation modules (EKF/ SO3 / other filters)
+	# Estimation modules
 	#
-	# Too high RAM usage due to static allocations
-	# modules/attitude_estimator_ekf
 	modules/attitude_estimator_q
-	modules/ekf_att_pos_estimator
-	modules/position_estimator_inav
+	#modules/position_estimator_inav
+	modules/local_position_estimator
 	modules/ekf2
 
 	#
@@ -117,22 +119,23 @@ set(config_module_list
 	lib/terrain_estimation
 	lib/runway_takeoff
 	lib/tailsitter_recovery
+	lib/version
 	lib/DriverFramework/framework
 	platforms/nuttx
 
 	# had to add for cmake, not sure why wasn't in original config
-	platforms/common 
+	platforms/common
 	platforms/nuttx/px4_layer
 
 	#
 	# OBC challenge
 	#
-	modules/bottle_drop
+	# modules/bottle_drop
 
 	#
 	# Rover apps
 	#
-	examples/rover_steering_control
+	# examples/rover_steering_control
 
 	#
 	# Demo apps
@@ -177,10 +180,12 @@ add_custom_target(sercon)
 set_target_properties(sercon PROPERTIES
 	PRIORITY "SCHED_PRIORITY_DEFAULT"
 	MAIN "sercon"
-	STACK_MAIN "2048")
+	STACK_MAIN "2048"
+	COMPILE_FLAGS "-Os")
 
 add_custom_target(serdis)
 set_target_properties(serdis PROPERTIES
 	PRIORITY "SCHED_PRIORITY_DEFAULT"
 	MAIN "serdis"
-	STACK_MAIN "2048")
+	STACK_MAIN "2048"
+	COMPILE_FLAGS "-Os")

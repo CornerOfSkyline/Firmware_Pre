@@ -88,6 +88,8 @@ class PWMSim : public device::CDev
 class PWMSim : public device::VDev
 #endif
 {
+	const uint32_t PWM_SIM_DISARMED_MAGIC = 900;
+	const uint32_t PWM_SIM_FAILSAFE_MAGIC = 600;
 public:
 	enum Mode {
 		MODE_2PWM,
@@ -128,6 +130,8 @@ private:
 
 	volatile bool	_task_should_exit;
 	static bool	_armed;
+	static bool	_lockdown;
+	static bool	_failsafe;
 
 	MixerGroup	*_mixers;
 
@@ -154,10 +158,10 @@ private:
 	static const GPIOConfig	_gpio_tab[];
 	static const unsigned	_ngpio;
 
-	void		gpio_reset(void);
+	void		gpio_reset();
 	void		gpio_set_function(uint32_t gpios, int function);
 	void		gpio_write(uint32_t gpios, int function);
-	uint32_t	gpio_read(void);
+	uint32_t	gpio_read();
 	int		gpio_ioctl(device::file_t *filp, int cmd, unsigned long arg);
 
 };
@@ -170,6 +174,8 @@ PWMSim	*g_pwm_sim;
 } // namespace
 
 bool PWMSim::_armed = false;
+bool PWMSim::_lockdown = false;
+bool PWMSim::_failsafe = false;
 
 PWMSim::PWMSim() :
 #ifdef __PX4_NUTTX
@@ -185,7 +191,7 @@ PWMSim::PWMSim() :
 	_poll_fds{},
 	_poll_fds_num(0),
 	_armed_sub(-1),
-	_outputs_pub(0),
+	_outputs_pub(nullptr),
 	_num_outputs(0),
 	_primary_pwm_device(false),
 	_groups_required(0),
@@ -414,7 +420,10 @@ PWMSim::task_main()
 			_current_update_rate = _update_rate;
 		}
 
+		/* this can happen during boot, but after the sleep its likely resolved */
 		if (_poll_fds_num == 0) {
+			usleep(1000 * 1000);
+
 			PX4_DEBUG("no valid fds");
 			continue;
 		}
@@ -468,13 +477,17 @@ PWMSim::task_main()
 				num_outputs = 8;
 				break;
 
+			case MODE_16PWM:
+				num_outputs = 16;
+				break;
+
 			default:
 				num_outputs = 0;
 				break;
 			}
 
 			/* do mixing */
-			num_outputs = _mixers->mix(&outputs.output[0], num_outputs, NULL);
+			num_outputs = _mixers->mix(&outputs.output[0], num_outputs, nullptr);
 			outputs.noutputs = num_outputs;
 			outputs.timestamp = hrt_absolute_time();
 
@@ -501,10 +514,23 @@ PWMSim::task_main()
 					 * This will be clearly visible on the servo status and will limit the risk of accidentally
 					 * spinning motors. It would be deadly in flight.
 					 */
-					outputs.output[i] = 900;
+					outputs.output[i] = PWM_SIM_DISARMED_MAGIC;
 				}
 			}
 
+			/* overwrite outputs in case of force_failsafe */
+			if (_failsafe) {
+				for (size_t i = 0; i < num_outputs; i++) {
+					outputs.output[i] = PWM_SIM_FAILSAFE_MAGIC;
+				}
+			}
+
+			/* overwrite outputs in case of lockdown */
+			if (_lockdown) {
+				for (size_t i = 0; i < num_outputs; i++) {
+					outputs.output[i] = 0.0;
+				}
+			}
 
 			/* and publish for anyone that cares to see */
 			orb_publish(ORB_ID(actuator_outputs), _outputs_pub, &outputs);
@@ -519,6 +545,8 @@ PWMSim::task_main()
 			orb_copy(ORB_ID(actuator_armed), _armed_sub, &aa);
 			/* do not obey the lockdown value, as lockdown is for PWMSim */
 			_armed = aa.armed;
+			_failsafe = aa.force_failsafe;
+			_lockdown = aa.lockdown || aa.manual_lockdown;
 		}
 	}
 
@@ -726,7 +754,11 @@ PWMSim::pwm_ioctl(device::file_t *filp, int cmd, unsigned long arg)
 
 	case PWM_SERVO_GET_COUNT:
 	case MIXERIOCGETOUTPUTCOUNT:
-		if (_mode == MODE_8PWM) {
+		if (_mode == MODE_16PWM) {
+			*(unsigned *)arg = 16;
+
+		} else if (_mode == MODE_8PWM) {
+
 			*(unsigned *)arg = 8;
 
 		} else if (_mode == MODE_4PWM) {
@@ -761,9 +793,10 @@ PWMSim::pwm_ioctl(device::file_t *filp, int cmd, unsigned long arg)
 				ret = -EINVAL;
 
 			} else {
-				if (_mixers == nullptr)
+				if (_mixers == nullptr) {
 					_mixers = new MixerGroup(control_callback,
 								 (uintptr_t)&_controls);
+				}
 
 				_mixers->add_mixer(mixer);
 				_mixers->groups_required(_groups_required);
@@ -829,7 +862,7 @@ enum PortMode {
 	PORT2_16PWM,
 };
 
-static PortMode g_port_mode = PORT_MODE_UNDEFINED;
+PortMode g_port_mode = PORT_MODE_UNDEFINED;
 
 int
 hil_new_mode(PortMode new_mode)
@@ -895,7 +928,7 @@ hil_new_mode(PortMode new_mode)
 }
 
 int
-test(void)
+test()
 {
 	int	fd;
 
@@ -924,13 +957,13 @@ fake(int argc, char *argv[])
 
 	actuator_controls_s ac;
 
-	ac.control[0] = strtol(argv[1], 0, 0) / 100.0f;
+	ac.control[0] = strtol(argv[1], nullptr, 0) / 100.0f;
 
-	ac.control[1] = strtol(argv[2], 0, 0) / 100.0f;
+	ac.control[1] = strtol(argv[2], nullptr, 0) / 100.0f;
 
-	ac.control[2] = strtol(argv[3], 0, 0) / 100.0f;
+	ac.control[2] = strtol(argv[3], nullptr, 0) / 100.0f;
 
-	ac.control[3] = strtol(argv[4], 0, 0) / 100.0f;
+	ac.control[3] = strtol(argv[4], nullptr, 0) / 100.0f;
 
 	orb_advert_t handle = orb_advertise(ORB_ID_VEHICLE_ATTITUDE_CONTROLS, &ac);
 
@@ -997,6 +1030,9 @@ pwm_out_sim_main(int argc, char *argv[])
 
 	} else if (!strcmp(verb, "mode_port2_pwm16")) {
 		new_mode = PORT2_8PWM;
+
+	} else if (!strcmp(verb, "mode_pwm16")) {
+		new_mode = PORT2_16PWM;
 	}
 
 	/* was a new mode set? */

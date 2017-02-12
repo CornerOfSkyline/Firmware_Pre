@@ -109,7 +109,7 @@ const int bits_per_allocation_unit  = (sizeof(*param_changed_storage) * 8);
 //#define ENABLE_SHMEM_DEBUG
 
 extern int get_shmem_lock(const char *caller_file_name, int caller_line_number);
-extern void release_shmem_lock(void);
+extern void release_shmem_lock(const char *caller_file_name, int caller_line_number);
 
 struct param_wbuf_s *param_find_changed(param_t param);
 
@@ -247,7 +247,7 @@ param_find_changed(param_t param)
 }
 
 static void
-param_notify_changes(bool is_saved)
+_param_notify_changes(bool is_saved)
 {
 	struct parameter_update_s pup = { .timestamp = hrt_absolute_time(), .saved = is_saved };
 
@@ -262,6 +262,13 @@ param_notify_changes(bool is_saved)
 		orb_publish(ORB_ID(parameter_update), param_topic, &pup);
 	}
 }
+
+void
+param_notify_changes(void)
+{
+	_param_notify_changes(true);
+}
+
 
 param_t
 param_find_internal(const char *name, bool notification)
@@ -643,7 +650,7 @@ out:
 	if (!param_import_done) { notify_changes = 0; }
 
 	if (params_changed && notify_changes) {
-		param_notify_changes(is_saved);
+		_param_notify_changes(is_saved);
 	}
 
 	if (result == 0 && !set_called_from_get) {
@@ -740,7 +747,7 @@ param_reset(param_t param)
 	param_unlock();
 
 	if (s != NULL) {
-		param_notify_changes(false);
+		_param_notify_changes(false);
 	}
 
 	return (!param_found);
@@ -760,7 +767,7 @@ param_reset_all(void)
 
 	param_unlock();
 
-	param_notify_changes(false);
+	_param_notify_changes(false);
 }
 
 void
@@ -792,7 +799,7 @@ param_reset_excludes(const char *excludes[], int num_excludes)
 
 	param_unlock();
 
-	param_notify_changes(false);
+	_param_notify_changes(false);
 }
 
 #ifdef __PX4_QURT
@@ -828,17 +835,8 @@ param_save_default(void)
 {
 	int res = OK;
 	int fd = -1;
-	bool is_locked = false;
 
 	const char *filename = param_get_default_file();
-
-	if (get_shmem_lock(__FILE__, __LINE__) != 0) {
-		PX4_ERR("Could not get shmem lock");
-		res = ERROR;
-		goto exit;
-	}
-
-	is_locked = true;
 
 	fd = PARAM_OPEN(filename, O_WRONLY | O_CREAT, PX4_O_MODE_666);
 
@@ -868,10 +866,6 @@ param_save_default(void)
 	fd = -1;
 
 exit:
-
-	if (is_locked) {
-		release_shmem_lock();
-	}
 
 	if (fd >= 0) {
 		close(fd);
@@ -923,7 +917,9 @@ param_load_default_no_notify(void)
 	int fd_load = open(param_get_default_file(), O_RDONLY);
 
 	if (fd_load < 0) {
-		release_shmem_lock();
+#ifdef __PX4_QURT
+		release_shmem_lock(__FILE__, __LINE__);
+#endif
 
 		/* no parameter file is OK, otherwise this is an error */
 		if (errno != ENOENT) {
@@ -1241,8 +1237,10 @@ uint32_t param_hash_check(void)
 
 void init_params(void)
 {
+#ifdef __PX4_QURT
 	//copy params to shared memory
 	init_shared_memory();
+#endif
 
 	/*load params automatically*/
 #ifdef __PX4_POSIX
@@ -1250,6 +1248,7 @@ void init_params(void)
 #endif
 	param_import_done = 1;
 
+#ifdef __PX4_QURT
 	copy_params_to_shmem(param_info_base);
 
 
@@ -1260,6 +1259,6 @@ void init_params(void)
 		 (unsigned char *)&shmem_info_p->krait_changed_index - (unsigned char *)shmem_info_p,
 		 (unsigned char *)&shmem_info_p->adsp_changed_index - (unsigned char *)shmem_info_p);
 #endif
-
+#endif
 }
 

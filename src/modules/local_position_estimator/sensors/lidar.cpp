@@ -25,19 +25,23 @@ void BlockLocalPositionEstimator::lidarInit()
 					     "mean %d cm stddev %d cm",
 					     int(100 * _lidarStats.getMean()(0)),
 					     int(100 * _lidarStats.getStdDev()(0)));
-		_lidarInitialized = true;
-		_lidarFault = FAULT_NONE;
+		_sensorTimeout &= ~SENSOR_LIDAR;
+		_sensorFault &= ~SENSOR_LIDAR;
 	}
 }
 
 int BlockLocalPositionEstimator::lidarMeasure(Vector<float, n_y_lidar> &y)
 {
 	// measure
-	float d = _sub_lidar->get().current_distance + _lidar_z_offset.get();
-	warnx("d %10.2g, lidar z offset %10.2g\n", double(d), double(_lidar_z_offset.get()));
-	float eps = 0.01f;
+	float d = _sub_lidar->get().current_distance;
+	float eps = 0.01f; // 1 cm
 	float min_dist = _sub_lidar->get().min_distance + eps;
 	float max_dist = _sub_lidar->get().max_distance - eps;
+
+	// prevent driver from setting min dist below eps
+	if (min_dist < eps) {
+		min_dist = eps;
+	}
 
 	// check for bad data
 	if (d > max_dist || d < min_dist) {
@@ -48,7 +52,9 @@ int BlockLocalPositionEstimator::lidarMeasure(Vector<float, n_y_lidar> &y)
 	_lidarStats.update(Scalarf(d));
 	_time_last_lidar = _timeStamp;
 	y.setZero();
-	y(0) = d;
+	y(0) = (d + _lidar_z_offset.get()) *
+	       cosf(_eul(0)) *
+	       cosf(_eul(1));
 	return OK;
 }
 
@@ -61,8 +67,8 @@ void BlockLocalPositionEstimator::lidarCorrect()
 
 	// account for leaning
 	y(0) = y(0) *
-	       cosf(_sub_att.get().roll) *
-	       cosf(_sub_att.get().pitch);
+	       cosf(_eul(0)) *
+	       cosf(_eul(1));
 
 	// measurement matrix
 	Matrix<float, n_y_lidar, n_x> C;
@@ -73,7 +79,7 @@ void BlockLocalPositionEstimator::lidarCorrect()
 	C(Y_lidar_z, X_tz) = 1; // measured altitude, negative down dir.
 
 	// use parameter covariance unless sensor provides reasonable value
-	Matrix<float, n_y_lidar, n_y_lidar> R;
+	SquareMatrix<float, n_y_lidar> R;
 	R.setZero();
 	float cov = _sub_lidar->get().covariance;
 
@@ -87,46 +93,38 @@ void BlockLocalPositionEstimator::lidarCorrect()
 	// residual
 	Matrix<float, n_y_lidar, n_y_lidar> S_I = inv<float, n_y_lidar>((C * _P * C.transpose()) + R);
 	Vector<float, n_y_lidar> r = y - C * _x;
+	_pub_innov.get().hagl_innov = r(0);
+	_pub_innov.get().hagl_innov_var = R(0, 0);
 
 	// fault detection
 	float beta = (r.transpose() * (S_I * r))(0, 0);
 
 	if (beta > BETA_TABLE[n_y_lidar]) {
-		if (_lidarFault < FAULT_MINOR) {
-			_lidarFault = FAULT_MINOR;
+		if (!(_sensorFault & SENSOR_LIDAR)) {
 			mavlink_and_console_log_info(&mavlink_log_pub, "[lpe] lidar fault,  beta %5.2f", double(beta));
+			_sensorFault |= SENSOR_LIDAR;
 		}
 
 		// abort correction
 		return;
 
-	} else if (_lidarFault) { // disable fault if ok
-		_lidarFault = FAULT_NONE;
-		//mavlink_and_console_log_info(&mavlink_log_pub, "[lpe] lidar OK");
+	} else if (_sensorFault & SENSOR_LIDAR) {
+		_sensorFault &= ~SENSOR_LIDAR;
+		mavlink_and_console_log_info(&mavlink_log_pub, "[lpe] lidar OK");
 	}
 
-	// kalman filter correction if no fault
-	if (_lidarFault < fault_lvl_disable) {
-		Matrix<float, n_x, n_y_lidar> K = _P * C.transpose() * S_I;
-		Vector<float, n_x> dx = K * r;
-
-		if (!_canEstimateXY) {
-			dx(X_x) = 0;
-			dx(X_y) = 0;
-			dx(X_vx) = 0;
-			dx(X_vy) = 0;
-		}
-
-		_x += dx;
-		_P -= K * C * _P;
-	}
+	// kalman filter correction always
+	Matrix<float, n_x, n_y_lidar> K = _P * C.transpose() * S_I;
+	Vector<float, n_x> dx = K * r;
+	_x += dx;
+	_P -= K * C * _P;
 }
 
 void BlockLocalPositionEstimator::lidarCheckTimeout()
 {
 	if (_timeStamp - _time_last_lidar > LIDAR_TIMEOUT) {
-		if (_lidarInitialized) {
-			_lidarInitialized = false;
+		if (!(_sensorTimeout & SENSOR_LIDAR)) {
+			_sensorTimeout |= SENSOR_LIDAR;
 			_lidarStats.reset();
 			mavlink_and_console_log_info(&mavlink_log_pub, "[lpe] lidar timeout ");
 		}

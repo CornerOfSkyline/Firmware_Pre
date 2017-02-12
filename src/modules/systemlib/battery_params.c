@@ -107,7 +107,8 @@ PARAM_DEFINE_FLOAT(BAT_CRIT_THR, 0.07f);
  * This implicitely defines the internal resistance
  * to maximum current ratio and assumes linearity.
  * A good value to use is the difference between the
- * 5C and 20-25C load.
+ * 5C and 20-25C load. Not used if BAT_R_INTERNAL is
+ * set.
  *
  * @group Battery Calibration
  * @unit V
@@ -119,12 +120,26 @@ PARAM_DEFINE_FLOAT(BAT_CRIT_THR, 0.07f);
 PARAM_DEFINE_FLOAT(BAT_V_LOAD_DROP, 0.3f);
 
 /**
+ * Explicitly defines the per cell internal resistance
+ *
+ * If non-negative, then this will be used in place of
+ * BAT_V_LOAD_DROP for all calculations.
+ *
+ * @group Battery Calibration
+ * @unit Ohms
+ * @min -1.0
+ * @max 0.2
+ */
+PARAM_DEFINE_FLOAT(BAT_R_INTERNAL, -1.0f);
+
+/**
  * Number of cells.
  *
  * Defines the number of cells the attached battery consists of.
  *
  * @group Battery Calibration
  * @unit S
+ * @value 0 Unconfigured
  * @value 2 2S Battery
  * @value 3 3S Battery
  * @value 4 4S Battery
@@ -141,7 +156,7 @@ PARAM_DEFINE_FLOAT(BAT_V_LOAD_DROP, 0.3f);
  * @value 15 15S Battery
  * @value 16 16S Battery
  */
-PARAM_DEFINE_INT32(BAT_N_CELLS, 3);
+PARAM_DEFINE_INT32(BAT_N_CELLS, 0);
 
 /**
  * Battery capacity.

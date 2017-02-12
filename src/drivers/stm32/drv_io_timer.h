@@ -47,6 +47,10 @@ __BEGIN_DECLS
 /* configuration limits */
 #define MAX_IO_TIMERS			4
 #define MAX_TIMER_IO_CHANNELS	8
+
+#define MAX_LED_TIMERS			2
+#define MAX_TIMER_LED_CHANNELS	6
+
 #define IO_TIMER_ALL_MODES_CHANNELS 0
 
 typedef enum io_timer_channel_mode_t {
@@ -84,12 +88,16 @@ typedef struct timer_io_channels_t {
 
 typedef void (*channel_handler_t)(void *context, const io_timers_t *timer, uint32_t chan_index,
 				  const timer_io_channels_t *chan,
-				  hrt_abstime isrs_time , uint16_t isrs_rcnt);
+				  hrt_abstime isrs_time, uint16_t isrs_rcnt);
 
 
 /* supplied by board-specific code */
 __EXPORT extern const io_timers_t io_timers[MAX_IO_TIMERS];
 __EXPORT extern const timer_io_channels_t timer_io_channels[MAX_TIMER_IO_CHANNELS];
+
+__EXPORT extern const io_timers_t led_pwm_timers[MAX_LED_TIMERS];
+__EXPORT extern const timer_io_channels_t led_pwm_channels[MAX_TIMER_LED_CHANNELS];
+
 __EXPORT extern io_timer_channel_allocation_t allocations[IOTimerChanModeSize];
 __EXPORT int io_timer_handler0(int irq, void *context);
 __EXPORT int io_timer_handler1(int irq, void *context);
@@ -98,6 +106,9 @@ __EXPORT int io_timer_handler3(int irq, void *context);
 
 __EXPORT int io_timer_channel_init(unsigned channel, io_timer_channel_mode_t mode,
 				   channel_handler_t channel_handler, void *context);
+
+__EXPORT int io_timer_init_timer(unsigned timer);
+
 __EXPORT int io_timer_set_rate(unsigned timer, unsigned rate);
 __EXPORT int io_timer_set_enable(bool state, io_timer_channel_mode_t mode,
 				 io_timer_channel_allocation_t masks);

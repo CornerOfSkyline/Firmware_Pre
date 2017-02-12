@@ -52,7 +52,10 @@
 
 using namespace DriverFramework;
 
-#if defined(__PX4_QURT) || defined(__PX4_POSIX_RPI2)
+namespace sensors
+{
+
+#if defined(__PX4_QURT) || defined(__PX4_POSIX_RPI) || defined(__PX4_POSIX_BEBOP)
 
 // Sensor initialization is performed automatically when the QuRT sensor drivers
 // are loaded.
@@ -65,12 +68,6 @@ sensors_init(void)
 }
 
 #else
-
-/* oddly, ERROR is not defined for c++ */
-#ifdef ERROR
-# undef ERROR
-#endif
-static const int ERROR = -1;
 
 /**
  * Do accel-related initialisation.
@@ -94,27 +91,28 @@ int		baro_init();
 
 
 int
-sensors_init(void)
+sensors_init()
 {
 	int ret;
+	int ret_combined = 0;
 
 	ret = accel_init();
 
-	if (ret) { return ret; }
+	if (ret) { ret_combined = ret; }
 
 	ret = gyro_init();
 
-	if (ret) { return ret; }
+	if (ret) { ret_combined = ret; }
 
 	ret = mag_init();
 
-	if (ret) { return ret; }
+	if (ret) { ret_combined = ret; }
 
 	ret = baro_init();
 
-	if (ret) { return ret; }
+	if (ret) { ret_combined = ret; }
 
-	return 0;
+	return ret_combined;
 }
 
 
@@ -126,7 +124,7 @@ accel_init()
 
 	if (!h_accel.isValid()) {
 		warnx("FATAL: no accelerometer found: %s (%d)", ACCEL0_DEVICE_PATH, h_accel.getError());
-		return ERROR;
+		return PX4_ERROR;
 
 	} else {
 
@@ -148,7 +146,7 @@ gyro_init()
 
 	if (!h_gyro.isValid()) {
 		warnx("FATAL: no gyro found: %s (%d)", GYRO0_DEVICE_PATH, h_gyro.getError());
-		return ERROR;
+		return PX4_ERROR;
 
 	}
 
@@ -171,7 +169,7 @@ mag_init()
 
 	if (!h_mag.isValid()) {
 		warnx("FATAL: no magnetometer found: %s (%d)", MAG0_DEVICE_PATH, h_mag.getError());
-		return ERROR;
+		return PX4_ERROR;
 	}
 
 	/* try different mag sampling rates */
@@ -193,7 +191,7 @@ mag_init()
 
 		} else {
 			warnx("FATAL: mag sampling rate could not be set");
-			return ERROR;
+			return PX4_ERROR;
 		}
 	}
 
@@ -208,7 +206,7 @@ baro_init()
 
 	if (!h_baro.isValid()) {
 		warnx("FATAL: No barometer found: %s (%d)", BARO0_DEVICE_PATH, h_baro.getError());
-		return ERROR;
+		return PX4_ERROR;
 	}
 
 	/* set the driver to poll at 150Hz */
@@ -218,3 +216,5 @@ baro_init()
 }
 
 #endif
+
+} /* namespace sensors */

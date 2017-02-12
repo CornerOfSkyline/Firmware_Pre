@@ -127,6 +127,45 @@ protected:
 	control::BlockParamFloat _fCut;
 };
 
+template<class Type, size_t M>
+class __EXPORT BlockLowPassVector: public Block
+{
+public:
+// methods
+	BlockLowPassVector(SuperBlock *parent,
+			   const char *name) :
+		Block(parent, name),
+		_state(),
+		_fCut(this, "") // only one parameter, no need to name
+	{
+		for (int i = 0; i < M; i++) {
+			_state(i) = 0.0f / 0.0f;
+		}
+	};
+	virtual ~BlockLowPassVector() {};
+	matrix::Vector<Type, M> update(const matrix::Matrix<Type, M, 1> &input)
+	{
+		for (int i = 0; i < M; i++) {
+			if (!PX4_ISFINITE(getState()(i))) {
+				setState(input);
+			}
+		}
+
+		float b = 2 * float(M_PI) * getFCut() * getDt();
+		float a = b / (1 + b);
+		setState(input * a + getState() * (1 - a));
+		return getState();
+	}
+// accessors
+	matrix::Vector<Type, M> getState() { return _state; }
+	float getFCut() { return _fCut.get(); }
+	void setState(const matrix::Vector<Type, M> &state) { _state = state; }
+private:
+// attributes
+	matrix::Vector<Type, M> _state;
+	control::BlockParamFloat _fCut;
+};
+
 /**
  * A high pass filter as described here:
  * http://en.wikipedia.org/wiki/High-pass_filter.
@@ -461,7 +500,7 @@ public:
 	virtual ~BlockRandUniform() {};
 	float update()
 	{
-		static float rand_max = MAX_RAND;
+		static float rand_max = RAND_MAX;
 		float rand_val = rand();
 		float bounds = getMax() - getMin();
 		return getMin() + (rand_val * bounds) / rand_max;
@@ -498,8 +537,8 @@ public:
 
 		if (phase == 0) {
 			do {
-				float U1 = (float)rand() / MAX_RAND;
-				float U2 = (float)rand() / MAX_RAND;
+				float U1 = (float)rand() / RAND_MAX;
+				float U2 = (float)rand() / RAND_MAX;
 				V1 = 2 * U1 - 1;
 				V2 = 2 * U2 - 1;
 				S = V1 * V1 + V2 * V2;

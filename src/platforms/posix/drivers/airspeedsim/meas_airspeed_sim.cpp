@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2013, 2014 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2013, 2014, 2017 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,7 +33,7 @@
 
 /**
  * @file meas_airspeed_sim.cpp
- * @author Lorenz Meier
+ * @author Lorenz Meier <lorenz@px4.io>
  * @author Sarthak Kaingade
  * @author Simon Wilks
  * @author Thomas Gubler
@@ -291,61 +291,6 @@ MEASAirspeedSim::cycle()
 void
 MEASAirspeedSim::voltage_correction(float &diff_press_pa, float &temperature)
 {
-#if defined(CONFIG_ARCH_BOARD_PX4FMU_V2) || defined(CONFIG_ARCH_BOARD_PX4FMU_V4)
-
-	if (_t_system_power == -1) {
-		_t_system_power = orb_subscribe(ORB_ID(system_power));
-	}
-
-	if (_t_system_power == -1) {
-		// not available
-		return;
-	}
-
-	bool updated = false;
-	orb_check(_t_system_power, &updated);
-
-	if (updated) {
-		orb_copy(ORB_ID(system_power), _t_system_power, &system_power);
-	}
-
-	if (system_power.voltage5V_v < 3.0f || system_power.voltage5V_v > 6.0f) {
-		// not valid, skip correction
-		return;
-	}
-
-	const float slope = 65.0f;
-	/*
-	  apply a piecewise linear correction, flattening at 0.5V from 5V
-	 */
-	float voltage_diff = system_power.voltage5V_v - 5.0f;
-
-	if (voltage_diff > 0.5f) {
-		voltage_diff = 0.5f;
-	}
-
-	if (voltage_diff < -0.5f) {
-		voltage_diff = -0.5f;
-	}
-
-	diff_press_pa -= voltage_diff * slope;
-
-	/*
-	  the temperature masurement varies as well
-	 */
-	const float temp_slope = 0.887f;
-	voltage_diff = system_power.voltage5V_v - 5.0f;
-
-	if (voltage_diff > 0.5f) {
-		voltage_diff = 0.5f;
-	}
-
-	if (voltage_diff < -1.0f) {
-		voltage_diff = -1.0f;
-	}
-
-	temperature -= voltage_diff * temp_slope;
-#endif // CONFIG_ARCH_BOARD_PX4FMU_V2
 }
 
 /**
@@ -528,13 +473,17 @@ reset()
 
 	if (ioctl(fd, SENSORIOCRESET, 0) < 0) {
 		PX4_ERR("driver reset failed");
+		close(fd);
 		return 1;
 	}
 
 	if (ioctl(fd, SENSORIOCSPOLLRATE, SENSOR_POLLRATE_DEFAULT) < 0) {
 		PX4_ERR("driver poll restart failed");
+		close(fd);
 		return 1;
 	}
+
+	close(fd);
 
 	return 0;
 }

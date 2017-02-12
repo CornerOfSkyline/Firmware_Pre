@@ -32,8 +32,8 @@
  ****************************************************************************/
 
 /**
- * @file mavlink_orb_listener.h
- * MAVLink 1.0 uORB listener definition
+ * @file mavlink_receiver.h
+ * MAVLink receiver thread
  *
  * @author Lorenz Meier <lorenz@px4.io>
  * @author Anton Babushkin <anton@px4.io>
@@ -77,6 +77,9 @@
 #include <uORB/topics/follow_target.h>
 #include <uORB/topics/transponder_report.h>
 #include <uORB/topics/gps_inject_data.h>
+#include <uORB/topics/control_state.h>
+#include <uORB/topics/collision_report.h>
+
 
 #include "mavlink_ftp.h"
 
@@ -141,9 +144,26 @@ private:
 	void handle_message_distance_sensor(mavlink_message_t *msg);
 	void handle_message_follow_target(mavlink_message_t *msg);
 	void handle_message_adsb_vehicle(mavlink_message_t *msg);
+	void handle_message_collision(mavlink_message_t *msg);
 	void handle_message_gps_rtcm_data(mavlink_message_t *msg);
+	void handle_message_battery_status(mavlink_message_t *msg);
+	void handle_message_serial_control(mavlink_message_t *msg);
+	void handle_message_logging_ack(mavlink_message_t *msg);
 
 	void *receive_thread(void *arg);
+
+	/**
+	 * Set the interval at which the given message stream is published.
+	 * The rate is the number of messages per second.
+	 *
+	 * @param msgId the message ID of to change the interval of
+	 * @param interval the interval in us to send the message at
+	 * @param data_rate the total link data rate in bytes per second
+	 *
+	 * @return PX4_OK on success, PX4_ERROR on fail
+	 */
+	int set_message_interval(int msgId, float interval, int data_rate = -1);
+	void get_message_interval(int msgId);
 
 	/**
 	 * Convert remote timestamp to local hrt time (usec)
@@ -205,9 +225,11 @@ private:
 	orb_advert_t _time_offset_pub;
 	orb_advert_t _follow_target_pub;
 	orb_advert_t _transponder_report_pub;
-	static const int _gps_inject_data_pub_size = 4;
-	orb_advert_t _gps_inject_data_pub[_gps_inject_data_pub_size];
-	int _gps_inject_data_next_idx = 0;
+	orb_advert_t _collision_report_pub;
+	orb_advert_t _control_state_pub;
+	static const int _gps_inject_data_queue_size = 6;
+	orb_advert_t _gps_inject_data_pub;
+	orb_advert_t _command_ack_pub;
 	int _control_mode_sub;
 	int _hil_frames;
 	uint64_t _old_timestamp;

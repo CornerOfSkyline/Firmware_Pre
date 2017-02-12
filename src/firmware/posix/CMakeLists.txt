@@ -1,8 +1,13 @@
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 px4_posix_generate_builtin_commands(
-	OUT apps.h
+	OUT apps
 	MODULE_LIST ${module_libraries})
+
+# Define build target
+set(APP_NAME px4)
+set(MAIN_SRC ${PX4_SOURCE_DIR}/src/platforms/posix/main.cpp)
+set(UPLOAD_NAME upload)
 
 if ("${BOARD}" STREQUAL "eagle" OR ("${BOARD}" STREQUAL "excelsior"))
 
@@ -13,13 +18,13 @@ if ("${BOARD}" STREQUAL "eagle" OR ("${BOARD}" STREQUAL "excelsior"))
 
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-prototypes -Wno-missing-declarations")
 	LINUX_APP(
-		APP_NAME mainapp
+		APP_NAME ${APP_NAME}
 		IDL_NAME px4muorb
 		APPS_DEST "/home/linaro"
 		SOURCES
 			px4muorb_stub.c
-			${CMAKE_SOURCE_DIR}/src/platforms/posix/main.cpp
-			apps.h
+			${MAIN_SRC}
+			apps.cpp
 		LINK_LIBS
 			-Wl,--start-group
 			${module_libraries}
@@ -29,22 +34,22 @@ if ("${BOARD}" STREQUAL "eagle" OR ("${BOARD}" STREQUAL "excelsior"))
 			-Wl,--end-group
 		)
 
-	px4_add_adb_push(OUT upload
-			 OS ${OS}
-			 BOARD ${BOARD}
-			 FILES ${CMAKE_CURRENT_BINARY_DIR}/mainapp
-				 ${CMAKE_SOURCE_DIR}/posix-configs/eagle/flight/mainapp.config
-			 DEPENDS mainapp
-			 DEST /home/linaro)
+	px4_add_adb_push(OUT ${UPLOAD_NAME}
+				OS ${OS}
+				BOARD ${BOARD}
+				FILES ${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}
+				${PX4_SOURCE_DIR}/posix-configs/eagle/flight/mainapp.config
+				DEPENDS ${APP_NAME}
+				DEST /home/linaro)
 
-elseif ("${BOARD}" STREQUAL "rpi2")
+elseif ("${BOARD}" STREQUAL "rpi")
 
-	add_executable(mainapp
-		${CMAKE_SOURCE_DIR}/src/platforms/posix/main.cpp
-		apps.h
+	px4_add_executable(${APP_NAME}
+		${MAIN_SRC}
+		apps.cpp
 		)
 
-	target_link_libraries(mainapp
+	target_link_libraries(${APP_NAME}
 		-Wl,--start-group
 		${module_libraries}
 		df_driver_framework
@@ -53,26 +58,28 @@ elseif ("${BOARD}" STREQUAL "rpi2")
 		-Wl,--end-group
 		)
 
-	px4_add_scp_push(OUT upload
-			 OS ${OS}
-			 BOARD ${BOARD}
-			 FILES ${CMAKE_CURRENT_BINARY_DIR}/mainapp
-				 ${CMAKE_SOURCE_DIR}/posix-configs/rpi2/mainapp.config
-			 DEPENDS mainapp
-			 DEST /home/pi)
+	file(GLOB RPI_CONFIG_FILES ${PX4_SOURCE_DIR}/posix-configs/rpi/*.config)
+	px4_add_scp_push(OUT ${UPLOAD_NAME}
+				OS ${OS}
+				BOARD ${BOARD}
+				FILES ${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}
+				${RPI_CONFIG_FILES}
+				${PX4_SOURCE_DIR}/ROMFS
+				DEPENDS ${APP_NAME}
+				DEST /home/pi)
 
 elseif ("${BOARD}" STREQUAL "bebop")
 
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -static")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static")
 
-	add_executable(mainapp
-		${CMAKE_SOURCE_DIR}/src/platforms/posix/main.cpp
-		apps.h
+	px4_add_executable(${APP_NAME}
+		${MAIN_SRC}
+		apps.cpp
 		)
 
 	if (NOT APPLE)
-		target_link_libraries(mainapp
+		target_link_libraries(${APP_NAME}
 			-Wl,--start-group
 			${module_libraries}
 			${df_driver_libs}
@@ -80,29 +87,34 @@ elseif ("${BOARD}" STREQUAL "bebop")
 			-Wl,--end-group
 			)
 	else()
-		target_link_libraries(mainapp
+		target_link_libraries(${APP_NAME}
 			${module_libraries}
 			${df_driver_libs}
 			pthread m
 			)
 	endif()
 
-	px4_add_adb_push_to_bebop(OUT upload
-			 OS ${OS}
-			 BOARD ${BOARD}
-			 FILES ${CMAKE_CURRENT_BINARY_DIR}/mainapp
-						 ${CMAKE_SOURCE_DIR}/posix-configs/bebop/mainapp.config
-			 DEPENDS mainapp
-			 DEST /usr/bin)
-			 
+	px4_add_adb_push_to_bebop(OUT ${UPLOAD_NAME}
+				OS ${OS}
+				BOARD ${BOARD}
+				FILES ${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}
+				DEPENDS ${APP_NAME}
+				DEST /usr/bin)
+
+elseif ("${BOARD}" STREQUAL "sitl")
+
+	include(./sitl_target.cmake)
+	include(./sitl_tests.cmake)
+
 else()
 
-	add_executable(mainapp
-		${CMAKE_SOURCE_DIR}/src/platforms/posix/main.cpp
-		apps.h
+	px4_add_executable(${APP_NAME}
+		${MAIN_SRC}
+		apps.cpp
 		)
+
 	if (NOT APPLE)
-		target_link_libraries(mainapp
+		target_link_libraries(${APP_NAME}
 			-Wl,--start-group
 			${module_libraries}
 			${df_driver_libs}
@@ -110,7 +122,7 @@ else()
 			-Wl,--end-group
 			)
 	else()
-		target_link_libraries(mainapp
+		target_link_libraries(${APP_NAME}
 			${module_libraries}
 			${df_driver_libs}
 			pthread m
@@ -118,40 +130,12 @@ else()
 	endif()
 endif()
 
-add_custom_target(run_config
-	COMMAND Tools/sitl_run.sh "${config_sitl_rcS}" "${config_sitl_debugger}"
-	"${config_sitl_viewer}" "${config_sitl_model}" "${CMAKE_BINARY_DIR}"
-	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-	USES_TERMINAL
-	)
-add_dependencies(run_config mainapp)
+#=============================================================================
+# install
+#
 
-foreach(viewer none jmavsim gazebo replay)
-	foreach(debugger none gdb lldb ddd valgrind)
-		foreach(model none iris iris_opt_flow tailsitter standard_vtol plane solo)
-			if (debugger STREQUAL "none")
-				if (model STREQUAL "none")
-					set(_targ_name "${viewer}")
-				else()
-					set(_targ_name "${viewer}_${model}")
-				endif()
-			else()
-				if (model STREQUAL "none")
-					set(_targ_name "${viewer}___${debugger}")
-				else()
-					set(_targ_name "${viewer}_${model}_${debugger}")
-				endif()
-			endif()
-			add_custom_target(${_targ_name}
-				COMMAND Tools/sitl_run.sh "${config_sitl_rcS}"
-				"${debugger}"
-				"${viewer}" "${model}" "${CMAKE_BINARY_DIR}"
-				WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-				USES_TERMINAL
-				)
-			add_dependencies(${_targ_name} mainapp)
-		endforeach()
-	endforeach()
-endforeach()
+install(TARGETS px4 DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/ROMFS DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME})
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/posix-configs DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME})
 
 # vim: set noet ft=cmake fenc=utf-8 ff=unix :

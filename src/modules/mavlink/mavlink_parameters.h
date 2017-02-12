@@ -61,7 +61,7 @@ public:
 		return "PARAM_VALUE";
 	}
 
-	uint8_t get_id()
+	uint16_t get_id()
 	{
 		return MAVLINK_MSG_ID_PARAM_VALUE;
 	}
@@ -73,6 +73,8 @@ public:
 
 	unsigned get_size();
 
+	unsigned get_size_avg();
+
 	void handle_message(const mavlink_message_t *msg);
 
 private:
@@ -80,7 +82,7 @@ private:
 
 	/* do not allow top copying this class */
 	MavlinkParametersManager(MavlinkParametersManager &);
-	MavlinkParametersManager& operator = (const MavlinkParametersManager &);
+	MavlinkParametersManager &operator = (const MavlinkParametersManager &);
 
 protected:
 	explicit MavlinkParametersManager(Mavlink *mavlink);
@@ -88,7 +90,7 @@ protected:
 
 	void send(const hrt_abstime t);
 
-	int send_param(param_t param);
+	int send_param(param_t param, int component_id = -1);
 
 	orb_advert_t _rc_param_map_pub;
 	struct rc_parameter_map_s _rc_param_map;
